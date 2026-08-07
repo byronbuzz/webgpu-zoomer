@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "fixtureCount": 10,
+  "vitest": { "passed": 7, "failed": 0 },
+  "nodeEvidenceTests": { "passed": 4, "failed": 0 },
+  "typecheck": "passed",
+  "sourceBundle": "passed",
+  "rustOracle": "unexecuted",
+  "wasmBuild": "unexecuted",
+  "browserDifferential": "unexecuted",
+  "precisionBenchmark": "unexecuted",
+  "crossHardware": "unexecuted",
+  "githubPublication": "blocked: repository creation unavailable through connector and gh absent"
+}

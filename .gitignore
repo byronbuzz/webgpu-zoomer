@@ -1,0 +1,10 @@
+node_modules/
+dist/
+dist-ts/
+*.tsbuildinfo
+target/
+apps/web/public/wasm/
+test-results/
+playwright-report/
+evidence/**/*.zip
+*.log

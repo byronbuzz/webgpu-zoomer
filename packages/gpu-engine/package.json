@@ -1,0 +1,10 @@
+{
+  "name": "@webgpu-zoomer/gpu-engine",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "dependencies": {
+    "@webgpu-zoomer/numerical-contract": "0.1.0"
+  }
+}

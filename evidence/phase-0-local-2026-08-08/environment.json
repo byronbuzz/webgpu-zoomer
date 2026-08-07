@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "os": "Linux x86_64 kernel 6.18.35",
+  "node": "v24.14.0",
+  "npm": "11.9.0",
+  "rustc": null,
+  "cargo": null,
+  "wasmBindgen": null,
+  "chromium": null,
+  "webGpuAdapter": null,
+  "githubCli": null,
+  "githubConnector": {
+    "authenticated": true,
+    "login": "byronbuzz",
+    "repositoryTarget": "byronbuzz/webgpu-zoomer",
+    "existingRepository": false
+  },
+  "limitations": ["No Rust/WASM toolchain", "No Chromium/WebGPU runtime", "No GitHub CLI"]
+}

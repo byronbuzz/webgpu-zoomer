@@ -1,0 +1,9 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/exact-camera" },
+    { "path": "packages/numerical-contract" },
+    { "path": "packages/gpu-engine" },
+    { "path": "apps/web" }
+  ]
+}

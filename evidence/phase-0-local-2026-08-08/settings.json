@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "oracleVersion": "exact-dyadic-v1",
+  "fixtureCorpus": "apps/web/public/fixtures/oracle-corpus-v1.json",
+  "webGpuMethod": "phase-0-direct-f32-candidate",
+  "publicationRule": "escaped GPU candidates require exact oracle status and iteration agreement"
+}

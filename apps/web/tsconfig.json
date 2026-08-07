@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "composite": true, "outDir": "dist-ts", "rootDir": "src", "lib": ["ES2024", "DOM", "WebWorker"] },
+  "references": [
+    { "path": "../../packages/numerical-contract" },
+    { "path": "../../packages/gpu-engine" }
+  ],
+  "include": ["src/**/*.ts"]
+}

@@ -1,0 +1,121 @@
+{
+  "schemaVersion": 1,
+  "oracleVersion": "exact-dyadic-v1",
+  "legacyExpectedResultsImported": false,
+  "cases": [
+    {
+      "id": "shallow-origin-analytic",
+      "category": "shallow",
+      "source": { "kind": "regenerated", "legacyPath": "tests/fixtures/shallow-direct-v1.json", "archiveSha256": "8a5a213128d4df81ae009ab3d21fa16d6d05da6fba108a1b508ec94cac5f19a5" },
+      "cRe": { "numerator": "0", "exponent": "0" },
+      "cIm": { "numerator": "0", "exponent": "0" },
+      "iterationCap": 64,
+      "precisionBits": 64,
+      "bailoutSquared": 4,
+      "expected": { "status": "certified_interior", "reason": "analytic_interior", "iterations": 0 }
+    },
+    {
+      "id": "shallow-exterior-one",
+      "category": "shallow",
+      "source": { "kind": "regenerated", "legacyPath": "tests/fixtures/shallow-direct-v1.json", "archiveSha256": "8a5a213128d4df81ae009ab3d21fa16d6d05da6fba108a1b508ec94cac5f19a5" },
+      "cRe": { "numerator": "1", "exponent": "0" },
+      "cIm": { "numerator": "0", "exponent": "0" },
+      "iterationCap": 64,
+      "precisionBits": 64,
+      "bailoutSquared": 4,
+      "gpuDirect": { "cRe": 1, "cIm": 0 },
+      "expected": { "status": "escaped", "reason": "escape_proved", "iterations": 3 }
+    },
+    {
+      "id": "strict-bailout-equality-then-escape",
+      "category": "boundary",
+      "source": { "kind": "regenerated", "legacyPath": "tests/fixtures/shallow-direct-v1.json", "archiveSha256": "8a5a213128d4df81ae009ab3d21fa16d6d05da6fba108a1b508ec94cac5f19a5" },
+      "cRe": { "numerator": "2", "exponent": "0" },
+      "cIm": { "numerator": "0", "exponent": "0" },
+      "iterationCap": 2,
+      "precisionBits": 64,
+      "bailoutSquared": 4,
+      "gpuDirect": { "cRe": 2, "cIm": 0 },
+      "expected": { "status": "escaped", "reason": "escape_proved", "iterations": 2 }
+    },
+    {
+      "id": "negative-world-coordinate",
+      "category": "negative-world-coordinate",
+      "source": { "kind": "new" },
+      "cRe": { "numerator": "-17", "exponent": "-3" },
+      "cIm": { "numerator": "0", "exponent": "0" },
+      "iterationCap": 64,
+      "precisionBits": 64,
+      "bailoutSquared": 4,
+      "gpuDirect": { "cRe": -2.125, "cIm": 0 },
+      "expected": { "status": "escaped", "reason": "escape_proved", "iterations": 1 }
+    },
+    {
+      "id": "cap-exhausted-minus-two",
+      "category": "boundary",
+      "source": { "kind": "regenerated", "legacyPath": "tests/fixtures/shallow-direct-v1.json", "archiveSha256": "8a5a213128d4df81ae009ab3d21fa16d6d05da6fba108a1b508ec94cac5f19a5" },
+      "cRe": { "numerator": "-2", "exponent": "0" },
+      "cIm": { "numerator": "0", "exponent": "0" },
+      "iterationCap": 128,
+      "precisionBits": 64,
+      "bailoutSquared": 4,
+      "gpuDirect": { "cRe": -2, "cIm": 0 },
+      "expected": { "status": "unresolved", "reason": "iteration_budget_exhausted", "iterations": 128 }
+    },
+    {
+      "id": "legacy-overlap-boundary-insufficient",
+      "category": "deep",
+      "source": { "kind": "regenerated", "legacyPath": "tests/fixtures/precision-overlap-boundary.json", "archiveSha256": "8a5a213128d4df81ae009ab3d21fa16d6d05da6fba108a1b508ec94cac5f19a5" },
+      "cRe": { "numerator": "-1086987134517280290689879582078081936663748018176", "exponent": "-160" },
+      "cIm": { "numerator": "-182091033578402453896837821740817316653599555584", "exponent": "-160" },
+      "iterationCap": 5000,
+      "precisionBits": 128,
+      "bailoutSquared": 4,
+      "expected": { "status": "unresolved", "reason": "insufficient_precision", "iterations": 0 }
+    },
+    {
+      "id": "legacy-deep-repair-storm-insufficient",
+      "category": "deep",
+      "source": { "kind": "regenerated", "legacyPath": "tests/fixtures/deep-repair-storm-2026-08-03.json", "archiveSha256": "8a5a213128d4df81ae009ab3d21fa16d6d05da6fba108a1b508ec94cac5f19a5" },
+      "cRe": { "numerator": "-1074788477571874238124292423478415414129187618816", "exponent": "-160" },
+      "cIm": { "numerator": "-225037893802927241757723552826372553133585858560", "exponent": "-160" },
+      "iterationCap": 11100,
+      "precisionBits": 128,
+      "bailoutSquared": 4,
+      "expected": { "status": "unresolved", "reason": "insufficient_precision", "iterations": 0 }
+    },
+    {
+      "id": "legacy-user-failure-insufficient",
+      "category": "insufficient-precision",
+      "source": { "kind": "regenerated", "legacyPath": "tests/fixtures/precision-user-failure-2026-08-03.json", "archiveSha256": "8a5a213128d4df81ae009ab3d21fa16d6d05da6fba108a1b508ec94cac5f19a5" },
+      "cRe": { "numerator": "-1094754282612631441136195986269190961334902063104", "exponent": "-160" },
+      "cIm": { "numerator": "-240999191986477269236474263803437467265499398144", "exponent": "-160" },
+      "iterationCap": 5000,
+      "precisionBits": 96,
+      "bailoutSquared": 4,
+      "expected": { "status": "unresolved", "reason": "insufficient_precision", "iterations": 0 }
+    },
+    {
+      "id": "extreme-exponent-analytic",
+      "category": "extreme-exponent",
+      "source": { "kind": "new" },
+      "cRe": { "numerator": "1", "exponent": "-20000" },
+      "cIm": { "numerator": "0", "exponent": "0" },
+      "iterationCap": 1,
+      "precisionBits": 20000,
+      "bailoutSquared": 4,
+      "expected": { "status": "certified_interior", "reason": "analytic_interior", "iterations": 0 }
+    },
+    {
+      "id": "intentional-insufficient-bound",
+      "category": "insufficient-precision",
+      "source": { "kind": "new" },
+      "cRe": { "numerator": "1", "exponent": "-4096" },
+      "cIm": { "numerator": "0", "exponent": "0" },
+      "iterationCap": 10,
+      "precisionBits": 512,
+      "bailoutSquared": 4,
+      "expected": { "status": "unresolved", "reason": "insufficient_precision", "iterations": 0 }
+    }
+  ]
+}

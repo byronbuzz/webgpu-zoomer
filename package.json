@@ -1,0 +1,35 @@
+{
+  "name": "webgpu-zoomer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.14.0"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "build:wasm": "node scripts/build-wasm.mjs",
+    "check": "npm run typecheck && npm run test",
+    "dev": "npm run dev --workspace @webgpu-zoomer/web",
+    "doctor": "node scripts/doctor.mjs",
+    "evidence:validate": "node scripts/validate-evidence.mjs",
+    "format:check": "npm run format:check --workspaces --if-present",
+    "setup": "node scripts/setup.mjs",
+    "test": "vitest run && node --test scripts/tests/*.test.mjs",
+    "test:browser": "playwright test",
+    "typecheck": "tsc -b",
+    "verify": "node scripts/verify.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "26.1.2",
+    "@webgpu/types": "0.1.71",
+    "playwright": "1.62.1",
+    "typescript": "7.0.2",
+    "vite": "8.2.1",
+    "vitest": "4.1.10"
+  }
+}

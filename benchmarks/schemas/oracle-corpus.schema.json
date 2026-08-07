@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://webgpu-zoomer.invalid/schemas/oracle-corpus-v1.json",
+  "type": "object",
+  "required": ["schemaVersion", "oracleVersion", "legacyExpectedResultsImported", "cases"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "oracleVersion": { "const": "exact-dyadic-v1" },
+    "legacyExpectedResultsImported": { "const": false },
+    "cases": { "type": "array", "minItems": 6 }
+  },
+  "additionalProperties": false
+}

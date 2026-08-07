@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "commit": "uncommitted-clean-successor",
+  "dirty": true,
+  "scene": "phase-0-deterministic-corpus",
+  "commands": [
+    { "command": "node scripts/validate-fixtures.mjs", "exitCode": 0 },
+    { "command": "npm run typecheck", "exitCode": 0 },
+    { "command": "npm run test", "exitCode": 0 },
+    { "command": "npm run build", "exitCode": 0 },
+    { "command": "npm run doctor", "exitCode": 0 },
+    { "command": "npm run verify", "exitCode": 127, "stoppedAt": "cargo fmt --all -- --check" },
+    { "command": "cargo run --release -p precision --example benchmark", "exitCode": 127 },
+    { "command": "npm run test:browser", "exitCode": 1, "stoppedAt": "Playwright Chromium executable unavailable" }
+  ],
+  "outcomes": [
+    "fixture schema/category validation passed",
+    "TypeScript project references passed",
+    "7 Vitest and 4 Node evidence-integrity tests passed",
+    "Vite source bundle passed",
+    "Rust/WASM/browser/GitHub gates unexecuted because required tools are absent",
+    "browser server command was repaired before the missing Chromium gate was recorded",
+    "GitHub connector authenticated as byronbuzz; no webgpu-zoomer repository exists and creation action is unavailable"
+  ]
+}

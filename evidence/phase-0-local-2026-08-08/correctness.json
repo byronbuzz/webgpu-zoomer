@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "status": "partial",
+  "semanticConflicts": 0,
+  "oracleMismatches": null,
+  "intentionalInsufficientBound": "specified and unit-tested at the publication contract; Rust/browser execution pending",
+  "capExhaustion": "unit-tested as unresolved in the TypeScript publication contract; Rust execution pending",
+  "claims": [
+    "Exact-camera TypeScript properties passed",
+    "Evidence validator accepted valid JSON/checksum/ZIP and rejected malformed variants",
+    "No Rust or WebGPU numerical acceptance claim is made"
+  ]
+}

@@ -1,0 +1,5 @@
+{
+  "schemaVersion": 1,
+  "kind": "not-applicable",
+  "reason": "FIRST_TASK numerical spine uses a deterministic sample corpus, not an interaction trajectory"
+}

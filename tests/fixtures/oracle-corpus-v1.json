@@ -1,0 +1,5 @@
+{
+  "$comment": "Canonical browser copy is apps/web/public/fixtures/oracle-corpus-v1.json. This pointer is checked by scripts/verify-fixture-copies.mjs.",
+  "canonicalPath": "apps/web/public/fixtures/oracle-corpus-v1.json",
+  "schemaVersion": 1
+}

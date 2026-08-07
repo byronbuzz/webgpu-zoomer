@@ -1,0 +1,6 @@
+:root { color-scheme: dark; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; background: #111417; color: #edf1f4; }
+body { margin: 0; }
+main { max-width: 960px; margin: 0 auto; padding: 2rem; }
+section, pre { background: #1a2025; border: 1px solid #39434b; border-radius: 8px; padding: 1rem; }
+button { margin: 1rem 0; padding: .7rem 1rem; background: #ff9f5b; color: #1a120c; border: 0; border-radius: 6px; font-weight: 700; }
+pre { white-space: pre-wrap; overflow-wrap: anywhere; }
