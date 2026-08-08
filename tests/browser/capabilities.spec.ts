@@ -30,6 +30,8 @@ type HarnessResult = Readonly<{
     presentationSnapshotChecksum: string;
     presentationAcceptedCount: number;
     presentationUnresolvedCount: number;
+    presentationHistoryChecksum: string;
+    presentationHistoryResidentViews: number;
     intentionalInsufficientBoundPassed: boolean;
     fallbackAdapter: boolean;
   };
@@ -45,6 +47,7 @@ type HarnessResult = Readonly<{
     planId: string;
     checksum: string;
     requestEpoch: string;
+    formulaVersion: number;
     level: string;
     domain?: { kind: string; version: number; width: number; height: number };
     bounds: { minX: string; maxX: string; minY: string; maxY: string };
@@ -80,6 +83,28 @@ type HarnessResult = Readonly<{
     acceptedCount?: number;
     unresolvedCount?: number;
     transformErrorLimitPx?: number;
+  };
+  presentationHistory: {
+    publish: { status: string; reason: string; viewKey?: string; evictedViewKey?: string };
+    selection: {
+      selected: boolean;
+      reason?: string;
+      viewKey?: string;
+      frameId?: string;
+      requestEpoch?: string;
+      counts?: { total: number; accepted: number; unresolved: number };
+    };
+    invalidTransformSelection: { selected: boolean; reason?: string };
+    diagnostics: {
+      maximumViews: number;
+      residentViews: number;
+      insertedViews: number;
+      mergedViews: number;
+      evictedViews: number;
+      staleSnapshots: number;
+      conflicts: number;
+    };
+    checksum: string;
   };
 }>;
 
@@ -180,9 +205,11 @@ test("WASM oracle and direct WebGPU corpus pass conservatively", async ({ page, 
     samplePlanLevel: "-2",
     scheduledAcceptedCount: 274,
     scheduledStoreChecksum: "fnv1a64:10d82ed1636ffd19",
-    presentationSnapshotChecksum: "fnv1a64:5c836dd98a60753e",
+    presentationSnapshotChecksum: "fnv1a64:56b82dc8f9e2e849",
     presentationAcceptedCount: 274,
     presentationUnresolvedCount: 38,
+    presentationHistoryChecksum: "fnv1a64:99d09993e8ee4c40",
+    presentationHistoryResidentViews: 1,
     intentionalInsufficientBoundPassed: true,
     fallbackAdapter: false,
   });
@@ -232,11 +259,12 @@ test("WASM oracle and direct WebGPU corpus pass conservatively", async ({ page, 
   expect(result.workAdmission.acceptedStore).toHaveLength(274);
   expect(result.workAdmission.acceptedStore.every((sample) => sample.acceptedEpoch === "0")).toBe(true);
   expect(result.presentationSnapshot).toMatchObject({
-    snapshotId: "presentation-snapshot:fnv1a64:5c836dd98a60753e",
-    checksum: "fnv1a64:5c836dd98a60753e",
+    snapshotId: "presentation-snapshot:fnv1a64:56b82dc8f9e2e849",
+    checksum: "fnv1a64:56b82dc8f9e2e849",
     authority: "presentation-only",
     sourcePlanId: result.samplePlan.planId,
     requestEpoch: "0",
+    formulaVersion: 1,
     counts: { total: 312, accepted: 274, unresolved: 38 },
   });
   expect(result.presentationSnapshot.cells).toHaveLength(312);
@@ -246,15 +274,41 @@ test("WASM oracle and direct WebGPU corpus pass conservatively", async ({ page, 
     .every((cell) => cell.reason === "not_published" && cell.displayValue === null)).toBe(true);
   expect(result.presentationComposite).toEqual({
     status: "composited",
-    snapshotId: "presentation-snapshot:fnv1a64:5c836dd98a60753e",
-    checksum: "fnv1a64:5c836dd98a60753e",
+    snapshotId: "presentation-snapshot:fnv1a64:56b82dc8f9e2e849",
+    checksum: "fnv1a64:56b82dc8f9e2e849",
     cellCount: 312,
     acceptedCount: 274,
     unresolvedCount: 38,
     transformErrorLimitPx: 0.25,
   });
+  expect(result.presentationHistory).toEqual({
+    publish: {
+      status: "inserted",
+      reason: "accepted",
+      viewKey: "presentation-view:fnv1a64:50ae8ecc03478b5c",
+    },
+    selection: {
+      selected: true,
+      viewKey: "presentation-view:fnv1a64:50ae8ecc03478b5c",
+      frameId: "presentation-history-frame:fnv1a64:e16554ef5616a066",
+      requestEpoch: "0",
+      counts: { total: 312, accepted: 274, unresolved: 38 },
+    },
+    invalidTransformSelection: { selected: false, reason: "invalid_transform" },
+    diagnostics: {
+      schemaVersion: 1,
+      maximumViews: 4,
+      residentViews: 1,
+      insertedViews: 1,
+      mergedViews: 0,
+      evictedViews: 0,
+      staleSnapshots: 0,
+      conflicts: 0,
+    },
+    checksum: "fnv1a64:99d09993e8ee4c40",
+  });
   await expect(page.locator("#preview")).toHaveAttribute("data-snapshot-state", "composited");
-  await expect(page.locator("#preview")).toHaveAttribute("data-snapshot-checksum", "fnv1a64:5c836dd98a60753e");
+  await expect(page.locator("#preview")).toHaveAttribute("data-snapshot-checksum", "fnv1a64:56b82dc8f9e2e849");
   expect(result.acceptedStore).toHaveLength(3);
   expect(result.acceptedStore.map((sample) => sample.key)).toEqual([
     "mandelbrot:1:-17p-3:0p0:1",
@@ -265,6 +319,25 @@ test("WASM oracle and direct WebGPU corpus pass conservatively", async ({ page, 
     && sample.qualityTier === "exact-oracle-agreement"
     && sample.errorSummary.contract === "exact-oracle-iteration-agreement"
     && sample.acceptedEpoch === "0")).toBe(true);
+});
+
+test("repeated exact-view publication remains one bounded history frame", async ({ page }) => {
+  await page.goto("./");
+  await waitForIsolation(page);
+  await page.locator("details.diagnostics").evaluate((details: HTMLDetailsElement) => { details.open = true; });
+  await page.getByRole("button", { name: "Run deterministic corpus" }).click();
+  await expect(page.locator("#results")).toHaveAttribute("data-state", "passed", { timeout: 120_000 });
+  const first = JSON.parse(await page.locator("#results").innerText()) as HarnessResult;
+  await page.getByRole("button", { name: "Run deterministic corpus" }).click();
+  await expect.poll(async () => {
+    const result = JSON.parse(await page.locator("#results").innerText()) as HarnessResult;
+    return result.presentationHistory.publish.status;
+  }, { timeout: 120_000 }).toBe("unchanged");
+  const second = JSON.parse(await page.locator("#results").innerText()) as HarnessResult;
+  expect(second.presentationHistory.publish).toMatchObject({ status: "unchanged", reason: "duplicate" });
+  expect(second.presentationHistory.diagnostics.residentViews).toBe(1);
+  expect(second.presentationHistory.checksum).toBe(first.presentationHistory.checksum);
+  expect(second.summary.scheduledStoreChecksum).toBe(first.summary.scheduledStoreChecksum);
 });
 
 test("composited snapshot invalidates on exact-camera change without changing numerical evidence", async ({ page }) => {

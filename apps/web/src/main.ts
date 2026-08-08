@@ -8,6 +8,7 @@ import {
 import {
   add,
   createCamera,
+  deserializeCamera,
   deserializeDyadic,
   dyadic,
   multiply,
@@ -37,6 +38,7 @@ import {
   prepareSnapshotComposite,
   type SnapshotCompositor,
 } from "@webgpu-zoomer/presentation-compositor";
+import { PresentationHistoryStore } from "@webgpu-zoomer/presentation-history";
 import { createPresentationSnapshot, type PresentationSnapshot } from "@webgpu-zoomer/presentation-snapshot";
 import { planViewportSampleGrid, serializeSamplePlan } from "@webgpu-zoomer/view-planner";
 import "./style.css";
@@ -87,6 +89,7 @@ const resetButton = document.querySelector<HTMLButtonElement>("#reset-view")!;
 const initialCamera = createCamera(dyadic(-1n, -1n), dyadic(0n, 0n), dyadic(11n, -2n));
 const pointerFocusFractionBits = 20;
 const presentationStepDurationMs = 180;
+const presentationHistory = new PresentationHistoryStore(4);
 let cameraAuthority: ExactCamera = initialCamera;
 let renderPreview = () => {};
 let currentPresentationView: MandelbrotPreviewView | undefined;
@@ -625,6 +628,19 @@ runButton.addEventListener("click", async () => {
         unresolvedCoverage,
       });
       const presentationComposite = await compositePresentationSnapshot(presentationSnapshot);
+      const historyPublish = presentationHistory.publish(presentationSnapshot);
+      const historySelection = presentationHistory.select(cameraAuthority, canvas.width, canvas.height);
+      const invalidHistoryProbe = new PresentationHistoryStore(1);
+      invalidHistoryProbe.publish(presentationSnapshot);
+      const invalidHistoryCamera = zoomAbout(
+        deserializeCamera(presentationSnapshot.camera),
+        dyadic(0n, 0n),
+        dyadic(0n, 0n),
+        -1n,
+      );
+      const invalidHistorySelection = invalidHistoryProbe.select(invalidHistoryCamera, canvas.width, canvas.height);
+      const historyDiagnostics = presentationHistory.diagnostics();
+      const historyChecksum = presentationHistory.checksum();
       const summary = {
         fixtureCount: corpus.cases.length,
         oracleMismatchCount: oracleChecks.filter((entry) => !entry.matches).length,
@@ -640,6 +656,8 @@ runButton.addEventListener("click", async () => {
         presentationSnapshotChecksum: presentationSnapshot.checksum,
         presentationAcceptedCount: presentationSnapshot.counts.accepted,
         presentationUnresolvedCount: presentationSnapshot.counts.unresolved,
+        presentationHistoryChecksum: historyChecksum,
+        presentationHistoryResidentViews: historyDiagnostics.residentViews,
         intentionalInsufficientBoundPassed: intentionalInsufficient?.actual.status === "unresolved"
           && intentionalInsufficient.actual.reason === "insufficient_precision",
         fallbackAdapter: environment.info.isFallbackAdapter,
@@ -665,12 +683,20 @@ runButton.addEventListener("click", async () => {
           && presentationComposite.acceptedCount === presentationSnapshot.counts.accepted
           && presentationComposite.unresolvedCount === presentationSnapshot.counts.unresolved
         : presentationComposite.reason === "camera_mismatch" || presentationComposite.reason === "viewport_mismatch";
+      const historyPassed = historyPublish.status !== "rejected"
+        && invalidHistorySelection.selected === false
+        && invalidHistorySelection.reason === "invalid_transform"
+        && (historySelection.selected
+          ? historySelection.frame.counts.accepted >= presentationSnapshot.counts.accepted
+            && historySelection.frame.counts.unresolved <= presentationSnapshot.counts.unresolved
+          : presentationComposite.status === "dropped" && historySelection.reason === "invalid_transform");
       const passed = summary.oracleMismatchCount === 0
         && summary.gpuMismatchCount === 0
         && summary.intentionalInsufficientBoundPassed
         && scheduledPassed
         && presentationPassed
         && presentationCompositePassed
+        && historyPassed
         && !summary.fallbackAdapter;
       resultNode.textContent = JSON.stringify({
         schemaVersion: 1,
@@ -688,6 +714,21 @@ runButton.addEventListener("click", async () => {
         },
         presentationSnapshot,
         presentationComposite,
+        presentationHistory: {
+          publish: historyPublish,
+          selection: historySelection.selected
+            ? {
+                selected: true,
+                viewKey: historySelection.frame.viewKey,
+                frameId: historySelection.frame.frameId,
+                requestEpoch: historySelection.frame.requestEpoch,
+                counts: historySelection.frame.counts,
+              }
+            : historySelection,
+          invalidTransformSelection: invalidHistorySelection,
+          diagnostics: historyDiagnostics,
+          checksum: historyChecksum,
+        },
         acceptedStore: acceptedSnapshot,
         oracleChecks,
         differentialChecks,

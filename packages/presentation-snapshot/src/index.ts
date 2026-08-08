@@ -30,6 +30,7 @@ export type PresentationSnapshot = Readonly<{
   sourcePlanId: string;
   camera: SerializedSamplePlan["camera"];
   requestEpoch: string;
+  formulaVersion: number;
   level: string;
   domain?: SerializedSamplePlan["domain"];
   bounds: SerializedSamplePlan["bounds"];
@@ -146,6 +147,7 @@ export function createPresentationSnapshot(input: Readonly<{
     sourcePlanId: input.plan.planId,
     camera: serializeCamera(input.plan.camera),
     requestEpoch: input.plan.requestEpoch.toString(),
+    formulaVersion: input.plan.formulaVersion,
     level: input.plan.level.toString(),
     ...(serializedPlan.domain ? { domain: serializedPlan.domain } : {}),
     bounds: serializedPlan.bounds,

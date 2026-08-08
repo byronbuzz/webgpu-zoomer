@@ -7,6 +7,7 @@
     { "path": "../../packages/numerical-contract" },
     { "path": "../../packages/numerical-work" },
     { "path": "../../packages/presentation-compositor" },
+    { "path": "../../packages/presentation-history" },
     { "path": "../../packages/presentation-snapshot" },
     { "path": "../../packages/gpu-engine" }
   ],

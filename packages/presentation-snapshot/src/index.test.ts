@@ -47,6 +47,7 @@ describe("one-way presentation snapshots", () => {
       authority: "presentation-only",
       sourcePlanId: sourcePlan.planId,
       requestEpoch: "3",
+      formulaVersion: 1,
       counts: { total: 4, accepted: 2, unresolved: 2 },
     });
     expect(snapshot.cells.map((cell) => cell.source)).toEqual(["accepted", "accepted", "unresolved", "unresolved"]);

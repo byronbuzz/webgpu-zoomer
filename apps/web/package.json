@@ -14,6 +14,7 @@
     "@webgpu-zoomer/numerical-contract": "0.1.0",
     "@webgpu-zoomer/numerical-work": "0.1.0",
     "@webgpu-zoomer/presentation-compositor": "0.1.0",
+    "@webgpu-zoomer/presentation-history": "0.1.0",
     "@webgpu-zoomer/presentation-snapshot": "0.1.0",
     "@webgpu-zoomer/view-planner": "0.1.0"
   }

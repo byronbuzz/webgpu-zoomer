@@ -1,0 +1,11 @@
+{
+  "name": "@webgpu-zoomer/presentation-history",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "dependencies": {
+    "@webgpu-zoomer/exact-camera": "0.1.0",
+    "@webgpu-zoomer/presentation-snapshot": "0.1.0"
+  }
+}
