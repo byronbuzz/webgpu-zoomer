@@ -1,4 +1,9 @@
-import { createDirectHarness, createMandelbrotPreview, type DirectSample } from "@webgpu-zoomer/gpu-engine";
+import {
+  createDirectHarness,
+  createMandelbrotPreview,
+  type DirectSample,
+  type MandelbrotPreviewView,
+} from "@webgpu-zoomer/gpu-engine";
 import {
   add,
   createCamera,
@@ -52,9 +57,17 @@ const resetButton = document.querySelector<HTMLButtonElement>("#reset-view")!;
 
 const initialCamera = createCamera(dyadic(-1n, -1n), dyadic(0n, 0n), dyadic(11n, -2n));
 const pointerFocusFractionBits = 20;
+const presentationStepDurationMs = 180;
 let cameraAuthority: ExactCamera = initialCamera;
 let renderPreview = () => {};
+let currentPresentationView: MandelbrotPreviewView | undefined;
+let drawPresentationView = (_view: MandelbrotPreviewView) => {};
+let transitionFrame = 0;
+const motionFrameDurations: number[] = [];
+let motionFrameCount = 0;
+let maximumFocusErrorPx = 0;
 previewNode.dataset.focusQuantizationBits = pointerFocusFractionBits.toString();
+previewNode.dataset.presentationAuthority = "presentation-only";
 
 const capabilities = {
   crossOriginIsolated,
@@ -100,7 +113,7 @@ function adapterEvidence(adapter: GPUAdapter): AdapterEvidence {
   };
 }
 
-function presentationView(camera: ExactCamera): { centerX: number; centerY: number; viewportScale: number } | null {
+function presentationView(camera: ExactCamera): MandelbrotPreviewView | null {
   const centerX = approximateDyadic(camera.centerX);
   const centerY = approximateDyadic(camera.centerY);
   const viewportScale = approximateDyadic(camera.viewportScale);
@@ -121,6 +134,79 @@ function presentationView(camera: ExactCamera): { centerX: number; centerY: numb
     return null;
   }
   return { centerX: centerX32, centerY: centerY32, viewportScale: viewportScale32 };
+}
+
+function publishMotionTelemetry(): void {
+  const sorted = [...motionFrameDurations].sort((left, right) => left - right);
+  const p95Index = Math.max(0, Math.ceil(sorted.length * 0.95) - 1);
+  previewNode.dataset.motionTelemetry = JSON.stringify({
+    schemaVersion: 1,
+    frameCount: motionFrameCount,
+    maximumFocusErrorPx,
+    p95FrameMs: sorted[p95Index] ?? 0,
+    sampleCount: sorted.length,
+    authority: "presentation-only",
+  });
+}
+
+function startPresentationTransition(focus: { x: ExactDyadic; y: ExactDyadic }): void {
+  const target = presentationView(cameraAuthority);
+  updateCameraReadout();
+  if (!target) {
+    cancelAnimationFrame(transitionFrame);
+    previewStatusNode.textContent = "Exact camera active · direct preview precision exhausted";
+    previewNode.dataset.state = "precision-limit";
+    previewNode.dataset.presentationState = "unresolved";
+    return;
+  }
+
+  const start = currentPresentationView ?? target;
+  const focusX = approximateDyadic(focus.x);
+  const focusY = approximateDyadic(focus.y);
+  if (!focusX || !focusY) {
+    drawPresentationView(target);
+    return;
+  }
+  const focusWorldX = start.centerX + focusX.value * start.viewportScale;
+  const focusWorldY = start.centerY + focusY.value * start.viewportScale;
+  const scaleRatio = target.viewportScale / start.viewportScale;
+  const startedAt = performance.now();
+  let previousFrameTime: number | undefined;
+  cancelAnimationFrame(transitionFrame);
+  previewNode.dataset.presentationState = "interpolating";
+
+  const animate = (time: number) => {
+    const progress = Math.min(1, (time - startedAt) / presentationStepDurationMs);
+    const scale = start.viewportScale * scaleRatio ** progress;
+    const view = progress === 1 ? target : {
+      centerX: focusWorldX - focusX.value * scale,
+      centerY: focusWorldY - focusY.value * scale,
+      viewportScale: scale,
+    };
+    const displayedCenterX = Math.fround(view.centerX);
+    const displayedCenterY = Math.fround(view.centerY);
+    const displayedScale = Math.fround(view.viewportScale);
+    const actualFocusX = displayedCenterX + focusX.value * displayedScale;
+    const actualFocusY = displayedCenterY + focusY.value * displayedScale;
+    const focusErrorPx = Math.hypot(actualFocusX - focusWorldX, actualFocusY - focusWorldY)
+      * canvas.clientHeight / displayedScale;
+    maximumFocusErrorPx = Math.max(maximumFocusErrorPx, focusErrorPx);
+    motionFrameCount += 1;
+    if (previousFrameTime !== undefined) {
+      motionFrameDurations.push(time - previousFrameTime);
+      if (motionFrameDurations.length > 512) motionFrameDurations.shift();
+    }
+    previousFrameTime = time;
+    drawPresentationView(view);
+    publishMotionTelemetry();
+
+    if (progress < 1) {
+      transitionFrame = requestAnimationFrame(animate);
+    } else {
+      previewNode.dataset.presentationState = "settled";
+    }
+  };
+  transitionFrame = requestAnimationFrame(animate);
 }
 
 function updateCameraReadout(): void {
@@ -164,7 +250,7 @@ function applyExactZoom(focus: { x: ExactDyadic; y: ExactDyadic }, exponentDelta
     || invariantFocus.y.exponent !== nextFocus.y.exponent) {
     throw new Error("Exact pointer-focus invariant failed.");
   }
-  renderPreview();
+  startPresentationTransition(focus);
 }
 
 function installCameraInteraction(): void {
@@ -176,7 +262,7 @@ function installCameraInteraction(): void {
     frame: number;
   };
   let hold: HoldState | undefined;
-  const stepIntervalMs = 180;
+  const stepIntervalMs = presentationStepDurationMs;
 
   const continueHold = (time: number) => {
     if (!hold) return;
@@ -216,6 +302,7 @@ function installCameraInteraction(): void {
     applyExactZoom(exactPointerFocus(event), event.deltaY < 0 ? -1n : 1n);
   }, { passive: false });
   resetButton.addEventListener("click", () => {
+    cancelAnimationFrame(transitionFrame);
     cameraAuthority = createCamera(
       initialCamera.centerX,
       initialCamera.centerY,
@@ -231,7 +318,7 @@ async function initializePreview(): Promise<void> {
     const { device, environment } = await getGpuSession();
     const preview = await createMandelbrotPreview(device, canvas);
     const adapterLabel = `${environment.info.vendor || "WebGPU"} ${environment.info.architecture}`.trim();
-    renderPreview = () => {
+    drawPresentationView = (view) => {
       const density = Math.min(window.devicePixelRatio, 2);
       const width = Math.max(1, Math.round(canvas.clientWidth * density));
       const height = Math.max(1, Math.round(canvas.clientHeight * density));
@@ -239,18 +326,41 @@ async function initializePreview(): Promise<void> {
         canvas.width = width;
         canvas.height = height;
       }
+      const f32View = {
+        centerX: Math.fround(view.centerX),
+        centerY: Math.fround(view.centerY),
+        viewportScale: Math.fround(view.viewportScale),
+      };
+      const halfPixelBudget = view.viewportScale / Math.max(2, canvas.height * 2);
+      if (!Number.isFinite(f32View.viewportScale)
+        || f32View.viewportScale <= 0
+        || Math.abs(view.centerX - f32View.centerX) > halfPixelBudget
+        || Math.abs(view.centerY - f32View.centerY) > halfPixelBudget
+        || Math.abs(view.viewportScale - f32View.viewportScale) > halfPixelBudget) {
+        previewStatusNode.textContent = "Exact camera active · direct preview precision exhausted";
+        previewNode.dataset.state = "precision-limit";
+        previewNode.dataset.presentationState = "unresolved";
+        return;
+      }
+      currentPresentationView = view;
+      preview.render(f32View);
+      previewStatusNode.textContent = adapterLabel;
+      previewNode.dataset.state = "ready";
+    };
+    renderPreview = () => {
+      cancelAnimationFrame(transitionFrame);
       const view = presentationView(cameraAuthority);
       updateCameraReadout();
       if (!view) {
         previewStatusNode.textContent = "Exact camera active · direct preview precision exhausted";
         previewNode.dataset.state = "precision-limit";
+        previewNode.dataset.presentationState = "unresolved";
         return;
       }
-      preview.render(view);
-      previewStatusNode.textContent = adapterLabel;
-      previewNode.dataset.state = "ready";
+      drawPresentationView(view);
+      previewNode.dataset.presentationState = "settled";
     };
-    new ResizeObserver(renderPreview).observe(canvas);
+    new ResizeObserver(() => currentPresentationView ? drawPresentationView(currentPresentationView) : renderPreview()).observe(canvas);
     installCameraInteraction();
     renderPreview();
   } catch (error) {

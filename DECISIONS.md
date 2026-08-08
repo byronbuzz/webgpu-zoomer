@@ -87,7 +87,12 @@ All decisions below were accepted on 2026-08-08 unless stated otherwise.
 ## D-021 — Exact camera precedes interactive presentation
 **Decision:** pointer hold, wheel zoom, steering, inverse zoom, and reset mutate only the canonical `ExactCamera`. Screen input is quantized once to an observable 20-fractional-bit dyadic focus; every zoom step preserves that exact world focus.  
 **Presentation contract:** binary64 and f32 camera values are derived one-way with explicit error bounds. The shallow direct canvas renders only while combined conversion/rounding error stays within half a display pixel. Bound failure reports `precision-limit`; the exact camera may continue without inventing pixels or writing approximation back into authority.  
-**Consequence:** the current interaction is exact but uses power-of-two camera steps. Smooth presentation interpolation and authoritative deep convergence remain later, separately validated slices.
+**Consequence:** camera authority uses exact power-of-two steps. Presentation interpolation is governed separately by D-022; authoritative deep convergence remains a later slice.
+
+## D-022 — Display-clock interpolation is one-way
+**Decision:** `requestAnimationFrame` interpolates only the derived shallow presentation transform between exact camera steps. New input may replace an in-flight presentation transition, but it cannot reconstruct or mutate camera authority.  
+**Evidence contract:** runtime telemetry records presentation frame count, P95 frame spacing, maximum displayed pointer-focus error, and explicit `presentation-only` provenance. Initial browser tests use generous smoke ceilings (`< 0.75 px` focus error and `< 100 ms` P95), not release performance claims.  
+**Consequence:** exact interaction appears smooth at display cadence while numerical and presentation clocks remain separate. Threshold calibration and long-duration trajectory benchmarks are still required by `FR-PERF-001`.
 
 ## RD-001 — Provisional Phase-0 oracle foundation
 **Status:** assumed; Windows Rust/WASM and one physical AMD stable-Chromium run pass, while clean-commit evidence preservation and NVIDIA comparison remain pending.  

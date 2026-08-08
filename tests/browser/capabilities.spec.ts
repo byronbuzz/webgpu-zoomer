@@ -148,6 +148,20 @@ test("exact camera preserves pointer focus and wheel round trips", async ({ page
   expect(heldZoom.epoch - roundTrip.epoch).toBeGreaterThanOrEqual(2n);
   const heldFocus = await readLastFocus(page);
   expect(worldAtFocus(heldZoom, heldFocus.x, heldFocus.y)).toEqual(worldAtFocus(roundTrip, heldFocus.x, heldFocus.y));
+  await expect(page.locator("#preview")).toHaveAttribute("data-presentation-state", "settled");
+  const telemetry = JSON.parse((await page.locator("#preview").getAttribute("data-motion-telemetry")) ?? "null") as {
+    frameCount: number;
+    maximumFocusErrorPx: number;
+    p95FrameMs: number;
+    sampleCount: number;
+    authority: string;
+  } | null;
+  expect(telemetry).not.toBeNull();
+  expect(telemetry!.frameCount).toBeGreaterThanOrEqual(6);
+  expect(telemetry!.sampleCount).toBeGreaterThanOrEqual(4);
+  expect(telemetry!.maximumFocusErrorPx).toBeLessThan(0.75);
+  expect(telemetry!.p95FrameMs).toBeLessThan(100);
+  expect(telemetry!.authority).toBe("presentation-only");
 
   let previousEpoch = heldZoom.epoch;
   for (let step = 0; step < 40; step += 1) {
