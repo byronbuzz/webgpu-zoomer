@@ -22,6 +22,7 @@ import {
   evaluateShallowDirectPublication,
   type OracleResult,
 } from "@webgpu-zoomer/numerical-contract";
+import { planSquareSampleGrid, serializeSamplePlan } from "@webgpu-zoomer/view-planner";
 import "./style.css";
 
 type Fixture = {
@@ -418,6 +419,14 @@ runButton.addEventListener("click", async () => {
         bailoutSquared: fixture.bailoutSquared,
       })));
 
+      const samplePlan = planSquareSampleGrid(cameraAuthority, {
+        formulaId: "mandelbrot",
+        formulaVersion: 1,
+        samplingVersion: 1,
+        samplesPerAxis: 8,
+        maximumSamples: 256,
+      });
+
       const { device, environment } = await getGpuSession();
       const directIndexes = corpus.cases.flatMap((fixture, index) => fixture.gpuDirect ? [index] : []);
       const directSamples: DirectSample[] = directIndexes.map((index) => {
@@ -481,6 +490,9 @@ runButton.addEventListener("click", async () => {
         gpuMismatchCount: differentialChecks.filter((entry) => !entry.matches).length,
         acceptedGpuEscapes: acceptedStore.size,
         acceptedStoreChecksum: acceptedStore.checksum(),
+        plannedSampleCount: samplePlan.samples.length,
+        samplePlanChecksum: samplePlan.checksum,
+        samplePlanLevel: samplePlan.level.toString(),
         intentionalInsufficientBoundPassed: intentionalInsufficient?.actual.status === "unresolved"
           && intentionalInsufficient.actual.reason === "insufficient_precision",
         fallbackAdapter: environment.info.isFallbackAdapter,
@@ -495,6 +507,7 @@ runButton.addEventListener("click", async () => {
         capabilities,
         environment,
         summary,
+        samplePlan: serializeSamplePlan(samplePlan),
         acceptedStore: acceptedSnapshot,
         oracleChecks,
         differentialChecks,

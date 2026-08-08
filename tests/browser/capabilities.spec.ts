@@ -22,6 +22,9 @@ type HarnessResult = Readonly<{
     gpuMismatchCount: number;
     acceptedGpuEscapes: number;
     acceptedStoreChecksum: string;
+    plannedSampleCount: number;
+    samplePlanChecksum: string;
+    samplePlanLevel: string;
     intentionalInsufficientBoundPassed: boolean;
     fallbackAdapter: boolean;
   };
@@ -33,6 +36,13 @@ type HarnessResult = Readonly<{
     errorSummary: { contract: string; workingPrecisionBits: number };
     acceptedEpoch: string;
   }>;
+  samplePlan: {
+    planId: string;
+    checksum: string;
+    requestEpoch: string;
+    level: string;
+    samples: Array<{ level: string; x: string; y: string }>;
+  };
 }>;
 
 async function waitForIsolation(page: import("playwright/test").Page): Promise<void> {
@@ -113,10 +123,22 @@ test("WASM oracle and direct WebGPU corpus pass conservatively", async ({ page, 
     gpuDifferentialCount: 4,
     gpuMismatchCount: 0,
     acceptedGpuEscapes: 3,
+    plannedSampleCount: 144,
+    samplePlanLevel: "-2",
     intentionalInsufficientBoundPassed: true,
     fallbackAdapter: false,
   });
   expect(result.summary.acceptedStoreChecksum).toMatch(/^fnv1a64:[0-9a-f]{16}$/);
+  expect(result.summary.samplePlanChecksum).toBe("fnv1a64:3cd55c4427a37a3f");
+  expect(result.samplePlan).toMatchObject({
+    planId: `sample-plan:${result.summary.samplePlanChecksum}`,
+    checksum: result.summary.samplePlanChecksum,
+    requestEpoch: "0",
+    level: "-2",
+  });
+  expect(result.samplePlan.samples).toHaveLength(144);
+  expect(result.samplePlan.samples[0]).toMatchObject({ level: "-2", x: "-8", y: "-6" });
+  expect(result.samplePlan.samples.at(-1)).toMatchObject({ level: "-2", x: "3", y: "5" });
   expect(result.acceptedStore).toHaveLength(3);
   expect(result.acceptedStore.map((sample) => sample.key)).toEqual([
     "mandelbrot:1:-17p-3:0p0:1",

@@ -3,6 +3,7 @@
   "compilerOptions": { "composite": true, "outDir": "dist-ts", "rootDir": "src", "lib": ["ES2024", "DOM", "WebWorker"] },
   "references": [
     { "path": "../../packages/exact-camera" },
+    { "path": "../../packages/view-planner" },
     { "path": "../../packages/numerical-contract" },
     { "path": "../../packages/gpu-engine" }
   ],

@@ -11,6 +11,7 @@
   "dependencies": {
     "@webgpu-zoomer/exact-camera": "0.1.0",
     "@webgpu-zoomer/gpu-engine": "0.1.0",
-    "@webgpu-zoomer/numerical-contract": "0.1.0"
+    "@webgpu-zoomer/numerical-contract": "0.1.0",
+    "@webgpu-zoomer/view-planner": "0.1.0"
   }
 }

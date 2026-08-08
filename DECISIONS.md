@@ -99,6 +99,11 @@ All decisions below were accepted on 2026-08-08 unless stated otherwise.
 **Store contract:** accepted samples are keyed by canonical world identity. Equivalent newer-epoch authority may replace older authority; stale epochs and semantic/channel conflicts are rejected. Store snapshots are sorted and checksummed for evidence. Presentation types have no conversion into the branded publication result.  
 **Limit:** this is an oracle-validated shallow contract, not the future production error ledger and not permission to read back GPU work on the interaction path. Perturbation, transport, rebasing, series/BLA, continuous potential, interior certification beyond the oracle, and store eviction remain later bounded slices.
 
+## D-024 — Canonical planning starts with an exact square demand window
+**Decision:** the first `View/World Planner` slice maps an immutable `ExactCamera` to a bounded square world window. It selects a power-of-two cell level using exact dyadic scale and integer density, covers half-open bounds with mathematical floor/ceiling, and emits stable `WorldKey` values in deterministic row-major order. World keys do not contain request epoch; the enclosing sample plan does.  
+**Evidence contract:** plans carry the exact serialized camera, bigint level/bounds, formula and sampling versions, explicit sample count, deterministic checksum/ID, and a replay check. Equivalent camera histories reproduce the same plan, epoch-only changes preserve world keys, negative quadrants are tested, extreme exponents remain representable, and over-budget demand fails before sample allocation.  
+**Limit:** the square window deliberately avoids deriving authority from CSS/presentation aspect ratios. Exact non-square viewport planning, prioritization, queues, eviction, GPU submission, and accepted-store integration are later slices.
+
 ## RD-001 — Provisional Phase-0 oracle foundation
 **Status:** assumed; Windows Rust/WASM and one physical AMD stable-Chromium run pass, while clean-commit evidence preservation and NVIDIA comparison remain pending.  
 **Decision:** use a pure-Rust exact-dyadic recurrence backed by `num-bigint` for the independent deterministic oracle. Treat the direct WebGPU kernel as a candidate generator that cannot publish authority without oracle agreement.  
