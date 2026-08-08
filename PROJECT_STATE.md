@@ -1,7 +1,7 @@
 # Project State
 
 **State date:** 2026-08-08  
-**Project phase:** `FIRST_TASK.md` is reviewed complete on the primary AMD validation machine. The completion review is preserved in `docs/FIRST_TASK_COMPLETION_REPORT.md`; clean-commit evidence is under `evidence/phase-0-amd-rdna4-edge151-2026-08-08/`. The first post-Phase-0 slice is live at `https://byronbuzz.github.io/webgpu-zoomer/`: a fixed shallow, explicitly non-authoritative WebGPU Mandelbrot canvas. Exact-camera interaction is next, before deep perturbation or production scheduling. Branded Chrome and NVIDIA cross-hardware comparison remain open.
+**Project phase:** `FIRST_TASK.md` is reviewed complete on the primary AMD validation machine. The completion review is preserved in `docs/FIRST_TASK_COMPLETION_REPORT.md`; clean-commit evidence is under `evidence/phase-0-amd-rdna4-edge151-2026-08-08/`. The live shallow preview at `https://byronbuzz.github.io/webgpu-zoomer/` now has pointer-focused hold/wheel zoom and reset driven exclusively by the exact dyadic camera. The next bounded slice is display-rate presentation interpolation and focus-error/frame-pacing measurement; deep perturbation and production scheduling remain later tasks. Branded Chrome and NVIDIA cross-hardware comparison remain open.
 
 ## Settled
 
@@ -28,6 +28,7 @@
 - S-021 — GitHub Pages Actions deployment is enabled at `https://byronbuzz.github.io/webgpu-zoomer/`. Workflow run `31238819356` built merge commit `e790835` only after `npm run verify` passed, then deployed successfully. The live-origin PowerShell command `$env:WEBGPU_ZOOMER_BASE_URL='https://byronbuzz.github.io/webgpu-zoomer/'; $env:WEBGPU_ZOOMER_BROWSER_CHANNEL='msedge'; npm run test:browser` passed 2/2: `crossOriginIsolated`, shared memory, and non-fallback AMD RDNA-4 WebGPU were true; all 10 oracle fixtures and 4 GPU differentials matched; cap exhaustion and intentional insufficient precision remained `unresolved`.
 - S-022 — `FIRST_TASK.md` completion criteria and required evidence were reviewed against the clean repository, physical bundle, deployed-origin result, and remaining limitations. Phase 0 is complete on the primary AMD machine; this does not promote branded-Chrome or NVIDIA cross-hardware claims. The next task is the bounded shallow visual slice defined in `docs/FIRST_TASK_COMPLETION_REPORT.md`.
 - S-023 — The bounded shallow visual slice is deployed from commit `3f6860c`. GitHub Pages workflow `31239691982` passed the complete deterministic build gate. Live visual inspection shows the Mandelbrot canvas on the AMD RDNA-4 adapter with no browser warnings/errors, and the live-origin headed Edge suite passes 2/2, including the unchanged ten-fixture oracle and four-case GPU differential corpus. The canvas is presentation-only and does not write accepted numerical state.
+- S-024 — Exact-camera interaction is deployed from commit `6a759d0` by workflow `31242417036`. Pointer input is quantized once to an observable 20-fractional-bit dyadic focus; hold, steering, wheel, inverse zoom, and reset mutate only `ExactCamera`. The live-origin headed Edge suite passes 3/3: exact focus is invariant, inverse wheel steps round-trip center/scale, held zoom advances continuously, and f32 half-pixel bound exhaustion reports `precision-limit` while exact camera epochs continue. Manual live inspection confirmed pointer-directed 1× to 2× zoom with no browser warnings/errors.
 
 ## Assumed
 
@@ -69,4 +70,5 @@ These are research/implementation questions, not reasons to change the product c
 
 - N-001 — Run the default branded-Chrome channel when Chrome can be installed. Do not relabel the passing Edge 151 result as Chrome evidence.
 - N-002 — Run the same frozen browser corpus on a qualifying NVIDIA system and compare semantic results before any `AT-NUM-009` cross-hardware correctness claim.
-- N-004 — After the visual smoke slice, bind interaction to the exact dyadic camera and add focus/round-trip browser tests before perturbation, rebasing, series/BLA, or production scheduling.
+- N-004 — Add display-rate presentation interpolation between exact dyadic camera steps. Measure pointer-focus error and frame pacing; interpolated state remains presentation-only and cannot feed camera or numerical authority.
+- N-005 — Define and test the conservative shallow direct-render publication contract and accepted numerical-store boundary before perturbation, rebasing, series/BLA, or production scheduling.
