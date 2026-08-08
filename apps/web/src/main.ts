@@ -29,7 +29,7 @@ import {
   type NumericalWorkItem,
   type WorkCompletion,
 } from "@webgpu-zoomer/numerical-work";
-import { planSquareSampleGrid, serializeSamplePlan } from "@webgpu-zoomer/view-planner";
+import { planViewportSampleGrid, serializeSamplePlan } from "@webgpu-zoomer/view-planner";
 import "./style.css";
 
 type Fixture = {
@@ -469,12 +469,14 @@ runButton.addEventListener("click", async () => {
         bailoutSquared: fixture.bailoutSquared,
       })));
 
-      const samplePlan = planSquareSampleGrid(cameraAuthority, {
+      const samplePlan = planViewportSampleGrid(cameraAuthority, {
         formulaId: "mandelbrot",
         formulaVersion: 1,
         samplingVersion: 1,
         samplesPerAxis: 8,
-        maximumSamples: 256,
+        maximumSamples: 512,
+        viewportWidth: Math.max(1, canvas.width),
+        viewportHeight: Math.max(1, canvas.height),
       });
 
       const { device, environment } = await getGpuSession();
@@ -566,9 +568,18 @@ runButton.addEventListener("click", async () => {
           && intentionalInsufficient.actual.reason === "insufficient_precision",
         fallbackAdapter: environment.info.isFallbackAdapter,
       };
+      const scheduledPassed = admission.accepted
+        && workDiagnostics.completedItems === samplePlan.samples.length
+        && workDiagnostics.publishedItems + workDiagnostics.unresolvedItems === samplePlan.samples.length
+        && workDiagnostics.publishedItems === scheduledStore.size
+        && workDiagnostics.staleItems === 0
+        && workDiagnostics.conflictItems === 0
+        && workDiagnostics.failedItems === 0
+        && workDiagnostics.budgetRejectedItems === 0;
       const passed = summary.oracleMismatchCount === 0
         && summary.gpuMismatchCount === 0
         && summary.intentionalInsufficientBoundPassed
+        && scheduledPassed
         && !summary.fallbackAdapter;
       resultNode.textContent = JSON.stringify({
         schemaVersion: 1,

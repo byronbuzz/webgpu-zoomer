@@ -5,7 +5,9 @@ import { describe, expect, it } from "vitest";
 import {
   SamplePlanBudgetExceeded,
   planSquareSampleGrid,
+  planViewportSampleGrid,
   replaySamplePlan,
+  replayViewportSamplePlan,
   serializeSamplePlan,
   type SamplePlanOptions,
 } from "./index.js";
@@ -28,6 +30,7 @@ describe("canonical square sample planning", () => {
     expect(plan.samples[0]).toEqual({ formulaId: "mandelbrot", level: -2n, x: -8n, y: -6n, samplingVersion: 1 });
     expect(plan.samples.at(-1)).toEqual({ formulaId: "mandelbrot", level: -2n, x: 3n, y: 5n, samplingVersion: 1 });
     expect(plan.checksum).toMatch(/^fnv1a64:[0-9a-f]{16}$/);
+    expect(plan.checksum).toBe("fnv1a64:3cd55c4427a37a3f");
   });
 
   it("replays byte-identically from serialized exact camera state", () => {
@@ -75,5 +78,55 @@ describe("canonical square sample planning", () => {
     const camera = createCamera(dyadic(1n, -20000n), dyadic(-1n, -20001n), dyadic(1n, -20020n));
     expect(deserializeCamera(serializeCamera(camera))).toEqual(camera);
     expect(() => planSquareSampleGrid(camera, options)).not.toThrow();
+  });
+});
+
+describe("exact integer-aspect viewport planning", () => {
+  it("covers a 16:9 domain with exact rational horizontal bounds", () => {
+    const camera = createCamera(dyadic(-1n, -1n), dyadic(0n, 0n), dyadic(11n, -2n));
+    const plan = planViewportSampleGrid(camera, {
+      ...options,
+      viewportWidth: 16,
+      viewportHeight: 9,
+    });
+    expect(plan.domain).toEqual({ kind: "integer-aspect", version: 1, width: 16, height: 9 });
+    expect(plan.level).toBe(-2n);
+    expect(plan.bounds).toEqual({ minX: -12n, maxX: 7n, minY: -6n, maxY: 5n });
+    expect(plan.samples).toHaveLength(240);
+  });
+
+  it("preserves world keys for equivalent aspect ratios while versioning dimensions", () => {
+    const camera = createCamera(dyadic(-5n, -4n), dyadic(3n, -5n), dyadic(7n, -8n), 9n);
+    const small = planViewportSampleGrid(camera, { ...options, maximumSamples: 512, viewportWidth: 16, viewportHeight: 9 });
+    const large = planViewportSampleGrid(camera, { ...options, maximumSamples: 512, viewportWidth: 1600, viewportHeight: 900 });
+    expect(large.samples).toEqual(small.samples);
+    expect(large.planId).not.toBe(small.planId);
+  });
+
+  it("replays exactly at extreme depth and rejects insufficient viewport budgets", () => {
+    const camera = createCamera(dyadic(-1n, -20000n), dyadic(1n, -20001n), dyadic(1n, -20020n), 12n);
+    const viewportOptions = { ...options, maximumSamples: 512, viewportWidth: 21, viewportHeight: 9 };
+    const plan = planViewportSampleGrid(camera, viewportOptions);
+    const serialized = serializeSamplePlan(plan);
+    expect(serializeSamplePlan(replayViewportSamplePlan(
+      JSON.parse(JSON.stringify(serialized)),
+      viewportOptions,
+    ))).toEqual(serialized);
+    expect(plan.level).toBe(-20023n);
+    expect(() => planViewportSampleGrid(camera, { ...viewportOptions, maximumSamples: 32 }))
+      .toThrow(SamplePlanBudgetExceeded);
+  });
+
+  it("uses mathematical floor and ceiling across negative fractional boundaries", () => {
+    const camera = createCamera(dyadic(-17n, -5n), dyadic(-1n, -3n), dyadic(3n, -3n));
+    const plan = planViewportSampleGrid(camera, {
+      ...options,
+      viewportWidth: 3,
+      viewportHeight: 2,
+    });
+    expect(plan.samples[0]!.x).toBe(plan.bounds.minX);
+    expect(plan.samples[0]!.y).toBe(plan.bounds.minY);
+    expect(plan.bounds.minX).toBeLessThan(0n);
+    expect(plan.bounds.minY).toBeLessThan(0n);
   });
 });

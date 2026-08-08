@@ -43,6 +43,8 @@ type HarnessResult = Readonly<{
     checksum: string;
     requestEpoch: string;
     level: string;
+    domain?: { kind: string; version: number; width: number; height: number };
+    bounds: { minX: string; maxX: string; minY: string; maxY: string };
     samples: Array<{ level: string; x: string; y: string }>;
   };
   workAdmission: {
@@ -147,36 +149,38 @@ test("WASM oracle and direct WebGPU corpus pass conservatively", async ({ page, 
     gpuDifferentialCount: 4,
     gpuMismatchCount: 0,
     acceptedGpuEscapes: 3,
-    plannedSampleCount: 144,
+    plannedSampleCount: 312,
     samplePlanLevel: "-2",
-    scheduledAcceptedCount: 106,
-    scheduledStoreChecksum: "fnv1a64:9ce7d1780d69bde1",
+    scheduledAcceptedCount: 274,
+    scheduledStoreChecksum: "fnv1a64:10d82ed1636ffd19",
     intentionalInsufficientBoundPassed: true,
     fallbackAdapter: false,
   });
   expect(result.summary.acceptedStoreChecksum).toMatch(/^fnv1a64:[0-9a-f]{16}$/);
-  expect(result.summary.samplePlanChecksum).toBe("fnv1a64:3cd55c4427a37a3f");
+  expect(result.summary.samplePlanChecksum).toBe("fnv1a64:db573639b8996b89");
   expect(result.samplePlan).toMatchObject({
     planId: `sample-plan:${result.summary.samplePlanChecksum}`,
     checksum: result.summary.samplePlanChecksum,
     requestEpoch: "0",
     level: "-2",
   });
-  expect(result.samplePlan.samples).toHaveLength(144);
-  expect(result.samplePlan.samples[0]).toMatchObject({ level: "-2", x: "-8", y: "-6" });
-  expect(result.samplePlan.samples.at(-1)).toMatchObject({ level: "-2", x: "3", y: "5" });
+  expect(result.samplePlan.domain).toEqual({ kind: "integer-aspect", version: 1, width: 1186, height: 517 });
+  expect(result.samplePlan.bounds).toEqual({ minX: "-15", maxX: "10", minY: "-6", maxY: "5" });
+  expect(result.samplePlan.samples).toHaveLength(312);
+  expect(result.samplePlan.samples[0]).toMatchObject({ level: "-2", x: "-15", y: "-6" });
+  expect(result.samplePlan.samples.at(-1)).toMatchObject({ level: "-2", x: "10", y: "5" });
   expect(result.workAdmission.admission).toEqual({
     accepted: true,
     reason: "admitted",
-    itemCount: 144,
+    itemCount: 312,
     requestEpoch: "0",
   });
   expect(result.workAdmission.admissionCallMs).toBeLessThan(50);
   expect(result.workAdmission.immediatelyAfterAdmission).toMatchObject({
     activeEpoch: "0",
-    pendingItems: 144,
+    pendingItems: 312,
     activeBatches: 1,
-    admittedItems: 144,
+    admittedItems: 312,
     completedItems: 0,
     publishedItems: 0,
     admissionReturnsPromise: false,
@@ -185,9 +189,9 @@ test("WASM oracle and direct WebGPU corpus pass conservatively", async ({ page, 
     activeEpoch: "0",
     pendingItems: 0,
     activeBatches: 0,
-    admittedItems: 144,
-    completedItems: 144,
-    publishedItems: 106,
+    admittedItems: 312,
+    completedItems: 312,
+    publishedItems: 274,
     unresolvedItems: 38,
     staleItems: 0,
     conflictItems: 0,
@@ -195,7 +199,7 @@ test("WASM oracle and direct WebGPU corpus pass conservatively", async ({ page, 
     budgetRejectedItems: 0,
     admissionReturnsPromise: false,
   });
-  expect(result.workAdmission.acceptedStore).toHaveLength(106);
+  expect(result.workAdmission.acceptedStore).toHaveLength(274);
   expect(result.workAdmission.acceptedStore.every((sample) => sample.acceptedEpoch === "0")).toBe(true);
   expect(result.acceptedStore).toHaveLength(3);
   expect(result.acceptedStore.map((sample) => sample.key)).toEqual([

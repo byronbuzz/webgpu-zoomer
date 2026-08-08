@@ -19,6 +19,18 @@ export type SamplePlanOptions = Readonly<{
   maximumSamples: number;
 }>;
 
+export type ViewportSamplePlanOptions = SamplePlanOptions & Readonly<{
+  viewportWidth: number;
+  viewportHeight: number;
+}>;
+
+export type ViewportDomain = Readonly<{
+  kind: "integer-aspect";
+  version: 1;
+  width: number;
+  height: number;
+}>;
+
 export type SamplePlan = Readonly<{
   schemaVersion: 1;
   planId: string;
@@ -27,6 +39,7 @@ export type SamplePlan = Readonly<{
   requestEpoch: bigint;
   formulaVersion: number;
   level: bigint;
+  domain?: ViewportDomain;
   bounds: Readonly<{ minX: bigint; maxX: bigint; minY: bigint; maxY: bigint }>;
   samples: readonly WorldKey[];
 }>;
@@ -39,6 +52,7 @@ export type SerializedSamplePlan = Readonly<{
   requestEpoch: string;
   formulaVersion: number;
   level: string;
+  domain?: ViewportDomain;
   bounds: Readonly<{ minX: string; maxX: string; minY: string; maxY: string }>;
   samples: readonly Readonly<{
     formulaId: string;
@@ -86,6 +100,45 @@ function ceilAtLevel(value: ExactCamera["centerX"], level: bigint): bigint {
   return -floorAtLevel(negate(value), level);
 }
 
+type Rational = Readonly<{ numerator: bigint; denominator: bigint }>;
+
+function floorRational(value: Rational): bigint {
+  const quotient = value.numerator / value.denominator;
+  const remainder = value.numerator % value.denominator;
+  return remainder < 0n ? quotient - 1n : quotient;
+}
+
+function ceilRational(value: Rational): bigint {
+  return -floorRational({ numerator: -value.numerator, denominator: value.denominator });
+}
+
+function addRational(left: Rational, right: Rational): Rational {
+  return {
+    numerator: left.numerator * right.denominator + right.numerator * left.denominator,
+    denominator: left.denominator * right.denominator,
+  };
+}
+
+function dyadicInGridUnits(value: ExactCamera["centerX"], level: bigint): Rational {
+  const shift = value.exponent - level;
+  return shift >= 0n
+    ? { numerator: value.numerator << shift, denominator: 1n }
+    : { numerator: value.numerator, denominator: 1n << -shift };
+}
+
+function scaledHalfSpanInGridUnits(
+  scale: ExactCamera["viewportScale"],
+  level: bigint,
+  extentNumerator: number,
+  extentDenominator: number,
+): Rational {
+  const base = dyadicInGridUnits(scale, level);
+  return {
+    numerator: base.numerator * BigInt(extentNumerator),
+    denominator: base.denominator * 2n * BigInt(extentDenominator),
+  };
+}
+
 function fnv1a64(value: string): string {
   let hash = 0xcbf29ce484222325n;
   for (let index = 0; index < value.length; index += 1) {
@@ -108,6 +161,7 @@ function serializableCore(plan: Omit<SamplePlan, "planId" | "checksum">) {
       minY: plan.bounds.minY.toString(),
       maxY: plan.bounds.maxY.toString(),
     },
+    ...(plan.domain ? { domain: plan.domain } : {}),
     samples: plan.samples.map((sample) => ({
       formulaId: sample.formulaId,
       level: sample.level.toString(),
@@ -118,26 +172,13 @@ function serializableCore(plan: Omit<SamplePlan, "planId" | "checksum">) {
   };
 }
 
-export function planSquareSampleGrid(camera: ExactCamera, options: SamplePlanOptions): SamplePlan {
-  if (!options.formulaId) throw new RangeError("formulaId is required.");
-  assertNonNegativeSafeInteger(options.formulaVersion, "formulaVersion");
-  assertNonNegativeSafeInteger(options.samplingVersion, "samplingVersion");
-  if (!Number.isSafeInteger(options.maximumSamples) || options.maximumSamples < 1) {
-    throw new RangeError("maximumSamples must be a positive safe integer.");
-  }
-  const densityExponent = powerOfTwoExponent(options.samplesPerAxis);
-  const level = positiveFloorLog2(camera.viewportScale) - densityExponent;
-  const halfSpan = scalePowerOfTwo(camera.viewportScale, -1n);
-  const minimumX = subtract(camera.centerX, halfSpan);
-  const maximumX = add(camera.centerX, halfSpan);
-  const minimumY = subtract(camera.centerY, halfSpan);
-  const maximumY = add(camera.centerY, halfSpan);
-  const bounds = Object.freeze({
-    minX: floorAtLevel(minimumX, level),
-    maxX: ceilAtLevel(maximumX, level) - 1n,
-    minY: floorAtLevel(minimumY, level),
-    maxY: ceilAtLevel(maximumY, level) - 1n,
-  });
+function finishPlan(
+  camera: ExactCamera,
+  options: SamplePlanOptions,
+  level: bigint,
+  bounds: SamplePlan["bounds"],
+  domain?: ViewportDomain,
+): SamplePlan {
   const width = bounds.maxX - bounds.minX + 1n;
   const height = bounds.maxY - bounds.minY + 1n;
   const requestedSamples = width * height;
@@ -163,11 +204,72 @@ export function planSquareSampleGrid(camera: ExactCamera, options: SamplePlanOpt
     requestEpoch: camera.epoch,
     formulaVersion: options.formulaVersion,
     level,
+    ...(domain ? { domain } : {}),
     bounds,
     samples: Object.freeze(samples),
   });
   const checksum = `fnv1a64:${fnv1a64(JSON.stringify(serializableCore(core)))}`;
   return Object.freeze({ ...core, planId: `sample-plan:${checksum}`, checksum });
+}
+
+export function planSquareSampleGrid(camera: ExactCamera, options: SamplePlanOptions): SamplePlan {
+  if (!options.formulaId) throw new RangeError("formulaId is required.");
+  assertNonNegativeSafeInteger(options.formulaVersion, "formulaVersion");
+  assertNonNegativeSafeInteger(options.samplingVersion, "samplingVersion");
+  if (!Number.isSafeInteger(options.maximumSamples) || options.maximumSamples < 1) {
+    throw new RangeError("maximumSamples must be a positive safe integer.");
+  }
+  const densityExponent = powerOfTwoExponent(options.samplesPerAxis);
+  const level = positiveFloorLog2(camera.viewportScale) - densityExponent;
+  const halfSpan = scalePowerOfTwo(camera.viewportScale, -1n);
+  const minimumX = subtract(camera.centerX, halfSpan);
+  const maximumX = add(camera.centerX, halfSpan);
+  const minimumY = subtract(camera.centerY, halfSpan);
+  const maximumY = add(camera.centerY, halfSpan);
+  const bounds = Object.freeze({
+    minX: floorAtLevel(minimumX, level),
+    maxX: ceilAtLevel(maximumX, level) - 1n,
+    minY: floorAtLevel(minimumY, level),
+    maxY: ceilAtLevel(maximumY, level) - 1n,
+  });
+  return finishPlan(camera, options, level, bounds);
+}
+
+export function planViewportSampleGrid(camera: ExactCamera, options: ViewportSamplePlanOptions): SamplePlan {
+  if (!options.formulaId) throw new RangeError("formulaId is required.");
+  assertNonNegativeSafeInteger(options.formulaVersion, "formulaVersion");
+  assertNonNegativeSafeInteger(options.samplingVersion, "samplingVersion");
+  if (!Number.isSafeInteger(options.maximumSamples) || options.maximumSamples < 1) {
+    throw new RangeError("maximumSamples must be a positive safe integer.");
+  }
+  if (!Number.isSafeInteger(options.viewportWidth) || options.viewportWidth < 1
+    || !Number.isSafeInteger(options.viewportHeight) || options.viewportHeight < 1) {
+    throw new RangeError("Viewport dimensions must be positive safe integers.");
+  }
+  const densityExponent = powerOfTwoExponent(options.samplesPerAxis);
+  const level = positiveFloorLog2(camera.viewportScale) - densityExponent;
+  const centerX = dyadicInGridUnits(camera.centerX, level);
+  const centerY = dyadicInGridUnits(camera.centerY, level);
+  const halfX = scaledHalfSpanInGridUnits(
+    camera.viewportScale,
+    level,
+    options.viewportWidth,
+    options.viewportHeight,
+  );
+  const halfY = scaledHalfSpanInGridUnits(camera.viewportScale, level, 1, 1);
+  const bounds = Object.freeze({
+    minX: floorRational(addRational(centerX, { numerator: -halfX.numerator, denominator: halfX.denominator })),
+    maxX: ceilRational(addRational(centerX, halfX)) - 1n,
+    minY: floorRational(addRational(centerY, { numerator: -halfY.numerator, denominator: halfY.denominator })),
+    maxY: ceilRational(addRational(centerY, halfY)) - 1n,
+  });
+  const domain = Object.freeze({
+    kind: "integer-aspect" as const,
+    version: 1 as const,
+    width: options.viewportWidth,
+    height: options.viewportHeight,
+  });
+  return finishPlan(camera, options, level, bounds, domain);
 }
 
 export function serializeSamplePlan(plan: SamplePlan): SerializedSamplePlan {
@@ -183,6 +285,18 @@ export function replaySamplePlan(serialized: SerializedSamplePlan, options: Samp
   if (replayed.planId !== serialized.planId || replayed.checksum !== serialized.checksum
     || JSON.stringify(serializeSamplePlan(replayed)) !== JSON.stringify(serialized)) {
     throw new Error("Serialized sample plan does not reproduce its canonical identity.");
+  }
+  return replayed;
+}
+
+export function replayViewportSamplePlan(
+  serialized: SerializedSamplePlan,
+  options: ViewportSamplePlanOptions,
+): SamplePlan {
+  const replayed = planViewportSampleGrid(deserializeCamera(serialized.camera), options);
+  if (replayed.planId !== serialized.planId || replayed.checksum !== serialized.checksum
+    || JSON.stringify(serializeSamplePlan(replayed)) !== JSON.stringify(serialized)) {
+    throw new Error("Serialized viewport sample plan does not reproduce its canonical identity.");
   }
   return replayed;
 }

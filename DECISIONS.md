@@ -110,6 +110,12 @@ All decisions below were accepted on 2026-08-08 unless stated otherwise.
 **Rejected attempt:** a 64-iteration dense-grid exact-dyadic oracle probe caused pathological numerator-growth CPU work on non-analytically-resolved interior-like cells and was terminated. It produced no acceptance evidence. This confirms that the Phase-0 exact oracle is not the production dense-grid reference engine and that iteration count alone is not a sufficient resource bound.  
 **Limit:** this slice proves admission, logical cancellation, stale safety, and bounded shallow publication. It does not yet provide GPU chunk preemption, a high-throughput reference pool, production queue prioritization, packed resource arenas, or long-duration resource settling.
 
+## D-026 — Non-square demand uses exact integer-aspect arithmetic
+**Decision:** the viewport planner accepts explicit positive integer width/height and computes horizontal half-span bounds as exact rationals in world-cell units. It never rounds aspect ratio through binary64 or stores rational coordinates as sample identity; emitted samples remain canonical dyadic `WorldKey`s. The domain records kind/version and original dimensions in the deterministic plan checksum.  
+**Compatibility:** `planSquareSampleGrid` remains the stable fallback and retains checksum `fnv1a64:3cd55c4427a37a3f`. Equivalent dimension ratios emit identical world keys even though their enclosing plan identities differ, preserving world-cache stability while retaining exact request provenance.  
+**Browser bound:** the diagnostic path captures the canvas backing dimensions as explicit integer demand-domain inputs, uses at most 512 samples, and feeds the resulting immutable plan to D-025. Canvas pixels and transforms still cannot classify samples or become numerical recurrence/reference inputs.  
+**Limit:** this establishes exact visible-domain coverage, not pixel-per-sample production density, prioritization, adaptive levels, or presentation snapshots.
+
 ## RD-001 — Provisional Phase-0 oracle foundation
 **Status:** assumed; Windows Rust/WASM and one physical AMD stable-Chromium run pass, while clean-commit evidence preservation and NVIDIA comparison remain pending.  
 **Decision:** use a pure-Rust exact-dyadic recurrence backed by `num-bigint` for the independent deterministic oracle. Treat the direct WebGPU kernel as a candidate generator that cannot publish authority without oracle agreement.  
