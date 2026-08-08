@@ -17,9 +17,19 @@ type HarnessResult = Readonly<{
   };
 }>;
 
+async function waitForIsolation(page: import("playwright/test").Page): Promise<void> {
+  await expect.poll(async () => {
+    try {
+      return await page.evaluate(() => window.crossOriginIsolated);
+    } catch {
+      return false;
+    }
+  }).toBe(true);
+}
+
 test("isolated stable browser harness reports capabilities", async ({ page }) => {
   await page.goto("./");
-  await expect.poll(() => page.evaluate(() => window.crossOriginIsolated)).toBe(true);
+  await waitForIsolation(page);
   const response = await page.reload();
   expect(response?.headers()["cross-origin-opener-policy"]).toBe("same-origin");
   expect(response?.headers()["cross-origin-embedder-policy"]).toBe("require-corp");
@@ -34,7 +44,7 @@ test("isolated stable browser harness reports capabilities", async ({ page }) =>
 
 test("WASM oracle and direct WebGPU corpus pass conservatively", async ({ page, browser }, testInfo) => {
   await page.goto("./");
-  await expect.poll(() => page.evaluate(() => window.crossOriginIsolated)).toBe(true);
+  await waitForIsolation(page);
   await page.locator("details.diagnostics").evaluate((details: HTMLDetailsElement) => { details.open = true; });
   await page.getByRole("button", { name: "Run deterministic corpus" }).click();
   await expect(page.locator("#results")).toHaveAttribute("data-state", /passed|failed|error/, { timeout: 120_000 });
