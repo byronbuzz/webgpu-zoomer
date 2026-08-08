@@ -39,6 +39,8 @@
 - A-009 — The direct WebGPU Phase-0 kernel produces non-authoritative candidates. Only exact oracle agreement can accept an escaped result in this experimental harness.
 - A-011 — Active dependency installation and development should use a non-synchronised local SSD checkout. On this machine, `npm ci` in the Google Drive-backed checkout entered an unkillable CPU-bound state, while the same lockfile installed 55 packages in 3 seconds in `C:\Users\Admin\Documents\GitHub\webgpu-zoomer`.
 
+- A-012 — GitHub Pages is suitable as the current public test host if its same-origin service-worker bootstrap produces a genuinely cross-origin-isolated runtime. Live runtime verification is required before this assumption can be promoted.
+
 ## Open
 
 - O-001 — The high-throughput Rust reference implementation remains open. Exact dyadic `num-bigint` is the provisional oracle foundation; Rug/MPFR is not Phase-0 browser-build-admitted and may be reconsidered only through a separate WASM feasibility task.
@@ -49,6 +51,8 @@
 - O-006 — Exact conservative error model for GPU recurrence and reference transport.
 - O-007 — Whether certified interior beyond analytic cardioid/bulb tests will include additional proof methods in v1.
 - O-009 — The default branded-Chrome run remains unexecuted because Chrome is absent and its system installer could not elevate from the agent session. Stable Edge 151 passed the same Chromium/WebGPU gate without experimental flags; preserve this distinction in evidence.
+
+- O-010 — The GitHub Pages service-worker isolation path remains unaccepted until the deployed site reports `crossOriginIsolated`, shared memory, non-fallback WebGPU, and a passing deterministic corpus on the live origin.
 
 These are research/implementation questions, not reasons to change the product contract.
 
@@ -64,6 +68,7 @@ These are research/implementation questions, not reasons to change the product c
 
 ## Next
 
+- N-000 — Deploy the validated `main` build to GitHub Pages and run the live-origin capability and deterministic-corpus check. Preserve failure as unsupported rather than weakening the gates.
 - N-001 — Run the default branded-Chrome channel when Chrome can be installed. Do not relabel the passing Edge 151 result as Chrome evidence.
 - N-002 — Run the same frozen browser corpus on a qualifying NVIDIA system and compare semantic results before any `AT-NUM-009` cross-hardware correctness claim.
 - N-003 — Review the preserved AMD bundle and remaining `FIRST_TASK.md` completion criteria, then select the next executable numerical-spine task.

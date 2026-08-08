@@ -2,6 +2,7 @@ import { defineConfig } from "playwright/test";
 
 const channel = process.env.WEBGPU_ZOOMER_BROWSER_CHANNEL ?? "chrome";
 const headless = process.env.WEBGPU_ZOOMER_HEADLESS === "1";
+const externalBaseUrl = process.env.WEBGPU_ZOOMER_BASE_URL;
 
 export default defineConfig({
   testDir: "tests/browser",
@@ -11,13 +12,13 @@ export default defineConfig({
   projects: [{
     name: `stable-${channel}-${headless ? "headless" : "headed"}`,
     use: {
-      baseURL: "http://127.0.0.1:4173",
+      baseURL: externalBaseUrl ?? "http://127.0.0.1:4173/",
       browserName: "chromium",
       channel,
       headless,
     },
   }],
-  webServer: {
+  webServer: externalBaseUrl ? undefined : {
     command: "npm exec vite -- apps/web --host 127.0.0.1 --port 4173",
     url: "http://127.0.0.1:4173",
     reuseExistingServer: false,

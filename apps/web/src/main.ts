@@ -87,7 +87,7 @@ runButton.addEventListener("click", async () => {
       throw new Error("Cross-origin isolation/shared memory requirement is not satisfied.");
     }
     if (!("gpu" in navigator)) throw new Error("WebGPU is unavailable.");
-    const response = await fetch("/fixtures/oracle-corpus-v1.json");
+    const response = await fetch(`${import.meta.env.BASE_URL}fixtures/oracle-corpus-v1.json`);
     const corpus = await response.json() as { cases: Fixture[] };
     const worker = new Worker(new URL("./oracle.worker.ts", import.meta.url), { type: "module" });
     try {

@@ -74,6 +74,11 @@ All decisions below were accepted on 2026-08-08 unless stated otherwise.
 **Decision:** do not reorganize or increment v1.4.  
 **Rationale:** legacy architecture carries unresolved numerical and scheduling assumptions; selective salvage is safer than inherited coupling.
 
+## D-019 — GitHub Pages test deployment
+**Decision:** publish validated `main` builds to the project GitHub Pages site. Because Pages does not expose response-header configuration, the test deployment may use a repository-local service worker to synthesize COOP/COEP for controlled responses.  
+**Constraint:** runtime `crossOriginIsolated`, shared-memory, WebGPU, and numerical gates remain authoritative. Failure stays unsupported or unresolved; the service worker's presence is not acceptance evidence.  
+**Consequence:** this provides a public test surface without silently weakening D-011 or selecting the final production host.
+
 ## RD-001 — Provisional Phase-0 oracle foundation
 **Status:** assumed; Windows Rust/WASM and one physical AMD stable-Chromium run pass, while clean-commit evidence preservation and NVIDIA comparison remain pending.  
 **Decision:** use a pure-Rust exact-dyadic recurrence backed by `num-bigint` for the independent deterministic oracle. Treat the direct WebGPU kernel as a candidate generator that cannot publish authority without oracle agreement.  

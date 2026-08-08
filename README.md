@@ -2,6 +2,8 @@
 
 Clean successor repository for a browser-native Mandelbrot explorer with exact navigation, conservative numerical authority, and a stable WebGPU production path.
 
+Public test harness: https://byronbuzz.github.io/webgpu-zoomer/
+
 This repository begins with the numerical and experimental spine defined by `FIRST_TASK.md`. It is not a port or reorganisation of the v1.4/V4/V5/V6 code.
 
 ## Setup

@@ -18,7 +18,9 @@ type HarnessResult = Readonly<{
 }>;
 
 test("isolated stable browser harness reports capabilities", async ({ page }) => {
-  const response = await page.goto("/");
+  await page.goto("./");
+  await expect.poll(() => page.evaluate(() => window.crossOriginIsolated)).toBe(true);
+  const response = await page.reload();
   expect(response?.headers()["cross-origin-opener-policy"]).toBe("same-origin");
   expect(response?.headers()["cross-origin-embedder-policy"]).toBe("require-corp");
   const capabilities = JSON.parse(await page.locator("#capabilities").innerText());
@@ -28,7 +30,8 @@ test("isolated stable browser harness reports capabilities", async ({ page }) =>
 });
 
 test("WASM oracle and direct WebGPU corpus pass conservatively", async ({ page, browser }, testInfo) => {
-  await page.goto("/");
+  await page.goto("./");
+  await expect.poll(() => page.evaluate(() => window.crossOriginIsolated)).toBe(true);
   await page.getByRole("button", { name: "Run deterministic corpus" }).click();
   await expect(page.locator("#results")).toHaveAttribute("data-state", /passed|failed|error/, { timeout: 120_000 });
 
