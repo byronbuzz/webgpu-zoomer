@@ -10,6 +10,7 @@ import {
   worldKey,
   zoomAbout,
 } from "./index.js";
+import { approximateDyadic } from "./approximate.js";
 
 function generator(seed: bigint): () => bigint {
   let state = seed;
@@ -55,5 +56,14 @@ describe("exact dyadic camera", () => {
   it("contains no binary64 reconstruction in the authoritative module", () => {
     const source = readFileSync(resolve("packages/exact-camera/src/index.ts"), "utf8");
     expect(source).not.toMatch(/\b(?:Number|parseFloat|Math)\s*\(/);
+  });
+
+  it("derives bounded presentation numbers without reconstructing authority", () => {
+    const exact = dyadic((1n << 60n) + 1n, -60n);
+    const approximate = approximateDyadic(exact);
+    expect(approximate).not.toBeNull();
+    expect(approximate!.value).toBe(1);
+    expect(approximate!.absoluteError).toBeGreaterThanOrEqual(2 ** -60);
+    expect(approximateDyadic(dyadic(1n, -20_000n))).toBeNull();
   });
 });

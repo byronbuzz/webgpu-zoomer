@@ -1,4 +1,16 @@
 import { createDirectHarness, createMandelbrotPreview, type DirectSample } from "@webgpu-zoomer/gpu-engine";
+import {
+  add,
+  createCamera,
+  dyadic,
+  multiply,
+  serializeCamera,
+  serializeDyadic,
+  zoomAbout,
+  type ExactCamera,
+  type ExactDyadic,
+} from "@webgpu-zoomer/exact-camera";
+import { approximateDyadic } from "@webgpu-zoomer/exact-camera/approximate";
 import { compareGpuCandidate, type OracleResult } from "@webgpu-zoomer/numerical-contract";
 import "./style.css";
 
@@ -35,6 +47,14 @@ const runButton = document.querySelector<HTMLButtonElement>("#run")!;
 const previewNode = document.querySelector<HTMLElement>("#preview")!;
 const previewStatusNode = document.querySelector<HTMLElement>("#preview-status")!;
 const canvas = document.querySelector<HTMLCanvasElement>("#mandelbrot")!;
+const cameraReadout = document.querySelector<HTMLElement>("#camera-readout")!;
+const resetButton = document.querySelector<HTMLButtonElement>("#reset-view")!;
+
+const initialCamera = createCamera(dyadic(-1n, -1n), dyadic(0n, 0n), dyadic(11n, -2n));
+const pointerFocusFractionBits = 20;
+let cameraAuthority: ExactCamera = initialCamera;
+let renderPreview = () => {};
+previewNode.dataset.focusQuantizationBits = pointerFocusFractionBits.toString();
 
 const capabilities = {
   crossOriginIsolated,
@@ -80,11 +100,138 @@ function adapterEvidence(adapter: GPUAdapter): AdapterEvidence {
   };
 }
 
+function presentationView(camera: ExactCamera): { centerX: number; centerY: number; viewportScale: number } | null {
+  const centerX = approximateDyadic(camera.centerX);
+  const centerY = approximateDyadic(camera.centerY);
+  const viewportScale = approximateDyadic(camera.viewportScale);
+  if (!centerX || !centerY || !viewportScale || viewportScale.value <= 0) return null;
+
+  const centerX32 = Math.fround(centerX.value);
+  const centerY32 = Math.fround(centerY.value);
+  const viewportScale32 = Math.fround(viewportScale.value);
+  const halfPixelBudget = viewportScale.value / Math.max(2, canvas.height * 2);
+  const centerXError = centerX.absoluteError + Math.abs(centerX.value - centerX32);
+  const centerYError = centerY.absoluteError + Math.abs(centerY.value - centerY32);
+  const scaleError = viewportScale.absoluteError + Math.abs(viewportScale.value - viewportScale32);
+  if (!Number.isFinite(viewportScale32)
+    || viewportScale32 <= 0
+    || centerXError > halfPixelBudget
+    || centerYError > halfPixelBudget
+    || scaleError > halfPixelBudget) {
+    return null;
+  }
+  return { centerX: centerX32, centerY: centerY32, viewportScale: viewportScale32 };
+}
+
+function updateCameraReadout(): void {
+  const encoded = serializeCamera(cameraAuthority);
+  previewNode.dataset.camera = JSON.stringify(encoded);
+  const scale = approximateDyadic(cameraAuthority.viewportScale);
+  const initialScale = approximateDyadic(initialCamera.viewportScale)!;
+  const magnification = scale ? initialScale.value / scale.value : Number.POSITIVE_INFINITY;
+  cameraReadout.textContent = `${magnification.toLocaleString(undefined, { maximumFractionDigits: 0 })}× · scale 2^${cameraAuthority.viewportScale.exponent}`;
+}
+
+function exactPointerFocus(event: PointerEvent | WheelEvent): { x: ExactDyadic; y: ExactDyadic } {
+  const bounds = canvas.getBoundingClientRect();
+  const focusGrid = 2 ** pointerFocusFractionBits;
+  const x = (event.clientX - bounds.left - bounds.width / 2) / bounds.height;
+  const y = (bounds.height / 2 - (event.clientY - bounds.top)) / bounds.height;
+  return {
+    x: dyadic(BigInt(Math.round(x * focusGrid)), BigInt(-pointerFocusFractionBits)),
+    y: dyadic(BigInt(Math.round(y * focusGrid)), BigInt(-pointerFocusFractionBits)),
+  };
+}
+
+function worldAtFocus(camera: ExactCamera, focus: { x: ExactDyadic; y: ExactDyadic }): { x: ExactDyadic; y: ExactDyadic } {
+  return {
+    x: add(camera.centerX, multiply(focus.x, camera.viewportScale)),
+    y: add(camera.centerY, multiply(focus.y, camera.viewportScale)),
+  };
+}
+
+function applyExactZoom(focus: { x: ExactDyadic; y: ExactDyadic }, exponentDelta: -1n | 1n): void {
+  previewNode.dataset.lastFocus = JSON.stringify({
+    x: serializeDyadic(focus.x),
+    y: serializeDyadic(focus.y),
+  });
+  const invariantFocus = worldAtFocus(cameraAuthority, focus);
+  cameraAuthority = zoomAbout(cameraAuthority, focus.x, focus.y, exponentDelta);
+  const nextFocus = worldAtFocus(cameraAuthority, focus);
+  if (invariantFocus.x.numerator !== nextFocus.x.numerator
+    || invariantFocus.x.exponent !== nextFocus.x.exponent
+    || invariantFocus.y.numerator !== nextFocus.y.numerator
+    || invariantFocus.y.exponent !== nextFocus.y.exponent) {
+    throw new Error("Exact pointer-focus invariant failed.");
+  }
+  renderPreview();
+}
+
+function installCameraInteraction(): void {
+  type HoldState = {
+    pointerId: number;
+    direction: -1n | 1n;
+    focus: { x: ExactDyadic; y: ExactDyadic };
+    lastStep: number;
+    frame: number;
+  };
+  let hold: HoldState | undefined;
+  const stepIntervalMs = 180;
+
+  const continueHold = (time: number) => {
+    if (!hold) return;
+    if (time - hold.lastStep >= stepIntervalMs) {
+      applyExactZoom(hold.focus, hold.direction);
+      hold.lastStep = time;
+    }
+    hold.frame = requestAnimationFrame(continueHold);
+  };
+  const stopHold = (event: PointerEvent) => {
+    if (!hold || event.pointerId !== hold.pointerId) return;
+    cancelAnimationFrame(hold.frame);
+    hold = undefined;
+  };
+
+  canvas.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0 && event.button !== 2) return;
+    event.preventDefault();
+    canvas.setPointerCapture(event.pointerId);
+    const direction = event.button === 2 || event.shiftKey ? 1n : -1n;
+    hold = {
+      pointerId: event.pointerId,
+      direction,
+      focus: exactPointerFocus(event),
+      lastStep: performance.now() - stepIntervalMs,
+      frame: requestAnimationFrame(continueHold),
+    };
+  });
+  canvas.addEventListener("pointermove", (event) => {
+    if (hold && event.pointerId === hold.pointerId) hold.focus = exactPointerFocus(event);
+  });
+  canvas.addEventListener("pointerup", stopHold);
+  canvas.addEventListener("pointercancel", stopHold);
+  canvas.addEventListener("contextmenu", (event) => event.preventDefault());
+  canvas.addEventListener("wheel", (event) => {
+    event.preventDefault();
+    applyExactZoom(exactPointerFocus(event), event.deltaY < 0 ? -1n : 1n);
+  }, { passive: false });
+  resetButton.addEventListener("click", () => {
+    cameraAuthority = createCamera(
+      initialCamera.centerX,
+      initialCamera.centerY,
+      initialCamera.viewportScale,
+      cameraAuthority.epoch + 1n,
+    );
+    renderPreview();
+  });
+}
+
 async function initializePreview(): Promise<void> {
   try {
     const { device, environment } = await getGpuSession();
     const preview = await createMandelbrotPreview(device, canvas);
-    const renderAtDisplaySize = () => {
+    const adapterLabel = `${environment.info.vendor || "WebGPU"} ${environment.info.architecture}`.trim();
+    renderPreview = () => {
       const density = Math.min(window.devicePixelRatio, 2);
       const width = Math.max(1, Math.round(canvas.clientWidth * density));
       const height = Math.max(1, Math.round(canvas.clientHeight * density));
@@ -92,12 +239,20 @@ async function initializePreview(): Promise<void> {
         canvas.width = width;
         canvas.height = height;
       }
-      preview.render();
+      const view = presentationView(cameraAuthority);
+      updateCameraReadout();
+      if (!view) {
+        previewStatusNode.textContent = "Exact camera active · direct preview precision exhausted";
+        previewNode.dataset.state = "precision-limit";
+        return;
+      }
+      preview.render(view);
+      previewStatusNode.textContent = adapterLabel;
+      previewNode.dataset.state = "ready";
     };
-    new ResizeObserver(renderAtDisplaySize).observe(canvas);
-    renderAtDisplaySize();
-    previewStatusNode.textContent = `${environment.info.vendor || "WebGPU"} ${environment.info.architecture}`.trim();
-    previewNode.dataset.state = "ready";
+    new ResizeObserver(renderPreview).observe(canvas);
+    installCameraInteraction();
+    renderPreview();
   } catch (error) {
     previewStatusNode.textContent = error instanceof Error ? error.message : String(error);
     previewNode.dataset.state = "error";

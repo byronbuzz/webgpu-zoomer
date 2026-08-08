@@ -17,8 +17,14 @@ export type DirectHarnessResult = Readonly<{
 const stride = 16;
 
 export type MandelbrotPreview = Readonly<{
-  render: () => void;
+  render: (view: MandelbrotPreviewView) => void;
   destroy: () => void;
+}>;
+
+export type MandelbrotPreviewView = Readonly<{
+  centerX: number;
+  centerY: number;
+  viewportScale: number;
 }>;
 
 export async function createMandelbrotPreview(device: GPUDevice, canvas: HTMLCanvasElement): Promise<MandelbrotPreview> {
@@ -52,13 +58,13 @@ export async function createMandelbrotPreview(device: GPUDevice, canvas: HTMLCan
     entries: [{ binding: 0, resource: { buffer: uniformBuffer } }],
   });
 
-  const render = () => {
+  const render = (view: MandelbrotPreviewView) => {
     device.queue.writeBuffer(uniformBuffer, 0, new Float32Array([
       canvas.width,
       canvas.height,
-      -0.5,
-      0,
-      2.75,
+      view.centerX,
+      view.centerY,
+      view.viewportScale,
       0,
       0,
       0,

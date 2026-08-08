@@ -84,6 +84,11 @@ All decisions below were accepted on 2026-08-08 unless stated otherwise.
 **Rationale:** this exercises the stable canvas/render/shading path immediately after the numerical-spine review without pretending that exact-camera interaction, deep precision, or production convergence exists.  
 **Consequence:** the next slice must bind interaction to the exact dyadic camera and its tests; this preview cannot be reused as a numerical reference or acceptance shortcut.
 
+## D-021 — Exact camera precedes interactive presentation
+**Decision:** pointer hold, wheel zoom, steering, inverse zoom, and reset mutate only the canonical `ExactCamera`. Screen input is quantized once to an observable 20-fractional-bit dyadic focus; every zoom step preserves that exact world focus.  
+**Presentation contract:** binary64 and f32 camera values are derived one-way with explicit error bounds. The shallow direct canvas renders only while combined conversion/rounding error stays within half a display pixel. Bound failure reports `precision-limit`; the exact camera may continue without inventing pixels or writing approximation back into authority.  
+**Consequence:** the current interaction is exact but uses power-of-two camera steps. Smooth presentation interpolation and authoritative deep convergence remain later, separately validated slices.
+
 ## RD-001 — Provisional Phase-0 oracle foundation
 **Status:** assumed; Windows Rust/WASM and one physical AMD stable-Chromium run pass, while clean-commit evidence preservation and NVIDIA comparison remain pending.  
 **Decision:** use a pure-Rust exact-dyadic recurrence backed by `num-bigint` for the independent deterministic oracle. Treat the direct WebGPU kernel as a candidate generator that cannot publish authority without oracle agreement.  

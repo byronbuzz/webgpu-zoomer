@@ -19,13 +19,19 @@
         <canvas id="mandelbrot" aria-label="A WebGPU rendering of the Mandelbrot set"></canvas>
         <div class="viewport-status">
           <strong id="preview-status">Starting WebGPU…</strong>
-          <span>Shallow direct preview · presentation only</span>
+          <span>Exact camera · shallow direct presentation</span>
         </div>
       </section>
 
       <div class="context-row">
-        <p>This first visible slice is deliberately simple. Exact navigation and authoritative deep convergence come next.</p>
-        <span>Center −0.5 + 0i · 320 iterations</span>
+        <div>
+          <strong>Hold to zoom in · right-click or Shift-hold to zoom out</strong>
+          <p>Move while holding to steer. The exact pointer focus remains fixed through every camera update.</p>
+        </div>
+        <div class="camera-controls">
+          <output id="camera-readout" aria-label="camera magnification">1×</output>
+          <button id="reset-view" class="secondary-button" type="button">Reset view</button>
+        </div>
       </div>
 
       <details class="diagnostics">
