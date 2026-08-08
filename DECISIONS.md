@@ -94,6 +94,11 @@ All decisions below were accepted on 2026-08-08 unless stated otherwise.
 **Evidence contract:** runtime telemetry records presentation frame count, P95 frame spacing, maximum displayed pointer-focus error, and explicit `presentation-only` provenance. Initial browser tests use generous smoke ceilings (`< 0.75 px` focus error and `< 100 ms` P95), not release performance claims.  
 **Consequence:** exact interaction appears smooth at display cadence while numerical and presentation clocks remain separate. Threshold calibration and long-duration trajectory benchmarks are still required by `FR-PERF-001`.
 
+## D-023 — Shallow direct publication requires independent exact agreement
+**Decision:** the bounded shallow direct path may publish only an `escaped` sample whose f32 WebGPU candidate and independent exact-dyadic oracle agree on the escape iteration. The publication result carries canonical exact-coordinate identity, request epoch, method/oracle versions, channels, quality tier, and the executable agreement contract. Unresolved, invalid, cap-exhausted, mismatched, or unversioned work cannot construct an accepted sample.  
+**Store contract:** accepted samples are keyed by canonical world identity. Equivalent newer-epoch authority may replace older authority; stale epochs and semantic/channel conflicts are rejected. Store snapshots are sorted and checksummed for evidence. Presentation types have no conversion into the branded publication result.  
+**Limit:** this is an oracle-validated shallow contract, not the future production error ledger and not permission to read back GPU work on the interaction path. Perturbation, transport, rebasing, series/BLA, continuous potential, interior certification beyond the oracle, and store eviction remain later bounded slices.
+
 ## RD-001 — Provisional Phase-0 oracle foundation
 **Status:** assumed; Windows Rust/WASM and one physical AMD stable-Chromium run pass, while clean-commit evidence preservation and NVIDIA comparison remain pending.  
 **Decision:** use a pure-Rust exact-dyadic recurrence backed by `num-bigint` for the independent deterministic oracle. Treat the direct WebGPU kernel as a candidate generator that cannot publish authority without oracle agreement.  

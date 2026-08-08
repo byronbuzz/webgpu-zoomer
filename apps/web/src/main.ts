@@ -16,7 +16,12 @@ import {
   type ExactDyadic,
 } from "@webgpu-zoomer/exact-camera";
 import { approximateDyadic } from "@webgpu-zoomer/exact-camera/approximate";
-import { compareGpuCandidate, type OracleResult } from "@webgpu-zoomer/numerical-contract";
+import {
+  AcceptedNumericalStore,
+  compareGpuCandidate,
+  evaluateShallowDirectPublication,
+  type OracleResult,
+} from "@webgpu-zoomer/numerical-contract";
 import "./style.css";
 
 type Fixture = {
@@ -32,6 +37,12 @@ type Fixture = {
     reason: OracleResult["reason"];
     iterations: number;
   };
+};
+
+type FixtureCorpus = {
+  schemaVersion: number;
+  oracleVersion: string;
+  cases: Fixture[];
 };
 
 type AdapterEvidence = Readonly<{
@@ -395,7 +406,7 @@ runButton.addEventListener("click", async () => {
     }
     if (!("gpu" in navigator)) throw new Error("WebGPU is unavailable.");
     const response = await fetch(`${import.meta.env.BASE_URL}fixtures/oracle-corpus-v1.json`);
-    const corpus = await response.json() as { cases: Fixture[] };
+    const corpus = await response.json() as FixtureCorpus;
     const worker = new Worker(new URL("./oracle.worker.ts", import.meta.url), { type: "module" });
     try {
       const oracle = await Promise.all(corpus.cases.map((fixture) => evaluateInWorker(worker, {
@@ -419,14 +430,34 @@ runButton.addEventListener("click", async () => {
         };
       });
       const gpuResults = await (await createDirectHarness(device))(directSamples);
+      const acceptedStore = new AcceptedNumericalStore();
       const differential = gpuResults.map((gpu, offset) => {
         const index = directIndexes[offset]!;
+        const fixture = corpus.cases[index]!;
         const oracleResult = oracle[index]!;
+        const publication = evaluateShallowDirectPublication({
+          identity: {
+            formulaId: "mandelbrot",
+            formulaVersion: 1,
+            cRe: fixture.cRe,
+            cIm: fixture.cIm,
+            samplingVersion: 1,
+          },
+          requestEpoch: cameraAuthority.epoch,
+          candidate: gpu.candidate,
+          oracle: oracleResult,
+          oracleVersion: corpus.oracleVersion,
+          methodVersion: "gpu-direct-f32-v1",
+        });
+        const storeWrite = publication.accepted ? acceptedStore.publish(publication.sample) : undefined;
         return {
-          id: corpus.cases[index]!.id,
+          id: fixture.id,
           gpu,
           oracle: oracleResult,
           comparison: compareGpuCandidate(gpu.candidate, oracleResult),
+          publication: publication.accepted
+            ? { accepted: true, key: publication.sample.key, storeWrite }
+            : publication,
         };
       });
       const oracleChecks = corpus.cases.map((fixture, index) => {
@@ -442,12 +473,14 @@ runButton.addEventListener("click", async () => {
           && entry.gpu.candidate.iterations === entry.oracle.iterations,
       }));
       const intentionalInsufficient = oracleChecks.find((entry) => entry.id === "intentional-insufficient-bound");
+      const acceptedSnapshot = acceptedStore.snapshot();
       const summary = {
         fixtureCount: corpus.cases.length,
         oracleMismatchCount: oracleChecks.filter((entry) => !entry.matches).length,
         gpuDifferentialCount: differentialChecks.length,
         gpuMismatchCount: differentialChecks.filter((entry) => !entry.matches).length,
-        acceptedGpuEscapes: differentialChecks.filter((entry) => entry.comparison.accepted).length,
+        acceptedGpuEscapes: acceptedStore.size,
+        acceptedStoreChecksum: acceptedStore.checksum(),
         intentionalInsufficientBoundPassed: intentionalInsufficient?.actual.status === "unresolved"
           && intentionalInsufficient.actual.reason === "insufficient_precision",
         fallbackAdapter: environment.info.isFallbackAdapter,
@@ -462,6 +495,7 @@ runButton.addEventListener("click", async () => {
         capabilities,
         environment,
         summary,
+        acceptedStore: acceptedSnapshot,
         oracleChecks,
         differentialChecks,
       }, null, 2);

@@ -21,9 +21,18 @@ type HarnessResult = Readonly<{
     gpuDifferentialCount: number;
     gpuMismatchCount: number;
     acceptedGpuEscapes: number;
+    acceptedStoreChecksum: string;
     intentionalInsufficientBoundPassed: boolean;
     fallbackAdapter: boolean;
   };
+  acceptedStore: Array<{
+    key: string;
+    provenance: string;
+    channels: { iterations: number };
+    qualityTier: string;
+    errorSummary: { contract: string; workingPrecisionBits: number };
+    acceptedEpoch: string;
+  }>;
 }>;
 
 async function waitForIsolation(page: import("playwright/test").Page): Promise<void> {
@@ -107,6 +116,17 @@ test("WASM oracle and direct WebGPU corpus pass conservatively", async ({ page, 
     intentionalInsufficientBoundPassed: true,
     fallbackAdapter: false,
   });
+  expect(result.summary.acceptedStoreChecksum).toMatch(/^fnv1a64:[0-9a-f]{16}$/);
+  expect(result.acceptedStore).toHaveLength(3);
+  expect(result.acceptedStore.map((sample) => sample.key)).toEqual([
+    "mandelbrot:1:-17p-3:0p0:1",
+    "mandelbrot:1:1p0:0p0:1",
+    "mandelbrot:1:1p1:0p0:1",
+  ]);
+  expect(result.acceptedStore.every((sample) => sample.provenance === "escaped"
+    && sample.qualityTier === "exact-oracle-agreement"
+    && sample.errorSummary.contract === "exact-oracle-iteration-agreement"
+    && sample.acceptedEpoch === "0")).toBe(true);
 });
 
 test("exact camera preserves pointer focus and wheel round trips", async ({ page }) => {
