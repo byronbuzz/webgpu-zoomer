@@ -1,19 +1,24 @@
 import { spawnSync } from "node:child_process";
 
+const npmCli = process.env.npm_execpath;
+const npmCommand = npmCli ? process.execPath : (process.platform === "win32" ? "npm.cmd" : "npm");
+const npmArgs = npmCli ? [npmCli, "--version"] : ["--version"];
+const npmNeedsShell = !npmCli && process.platform === "win32";
+
 const checks = [
-  ["node", ["--version"]],
-  ["npm", ["--version"]],
-  ["rustc", ["--version"]],
-  ["cargo", ["--version"]],
-  ["wasm-bindgen", ["--version"]],
-  ["chromium", ["--version"]],
-  ["gh", ["--version"]],
+  { label: "node", command: "node", args: ["--version"] },
+  { label: "npm", command: npmCommand, args: npmArgs, shell: npmNeedsShell },
+  { label: "rustc", command: "rustc", args: ["--version"] },
+  { label: "cargo", command: "cargo", args: ["--version"] },
+  { label: "wasm-bindgen", command: "wasm-bindgen", args: ["--version"] },
+  { label: "chromium", command: "chromium", args: ["--version"] },
+  { label: "gh", command: "gh", args: ["--version"] },
 ];
 
-const results = checks.map(([command, args]) => {
-  const run = spawnSync(command, args, { encoding: "utf8" });
+const results = checks.map(({ label, command, args, shell = false }) => {
+  const run = spawnSync(command, args, { encoding: "utf8", shell });
   return {
-    command,
+    command: label,
     available: run.status === 0,
     version: run.status === 0 ? run.stdout.trim() : null,
     error: run.status === 0 ? null : (run.error?.code ?? run.stderr.trim() ?? `exit ${run.status}`),

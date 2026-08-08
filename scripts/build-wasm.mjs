@@ -1,9 +1,10 @@
 import { mkdirSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 
-const root = resolve(new URL("..", import.meta.url).pathname);
-const output = resolve(root, "apps/web/public/wasm");
+const root = fileURLToPath(new URL("..", import.meta.url));
+const output = resolve(root, "apps/web/src/generated/wasm");
 mkdirSync(output, { recursive: true });
 
 const steps = [

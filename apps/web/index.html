@@ -13,6 +13,26 @@
       <button id="run" type="button">Run deterministic corpus</button>
       <pre id="results" aria-live="polite">Not run.</pre>
     </main>
+    <script>
+      (() => {
+        const reloadKey = "webgpu-zoomer-coi-reload";
+        if (window.crossOriginIsolated) {
+          sessionStorage.removeItem(reloadKey);
+          return;
+        }
+        if (!("serviceWorker" in navigator)) return;
+
+        navigator.serviceWorker.register("%BASE_URL%coi-serviceworker.js", { scope: "./" }).then(() => {
+          if (sessionStorage.getItem(reloadKey)) return;
+          const reload = () => {
+            sessionStorage.setItem(reloadKey, "1");
+            window.location.reload();
+          };
+          if (navigator.serviceWorker.controller) reload();
+          else navigator.serviceWorker.addEventListener("controllerchange", reload, { once: true });
+        }).catch((error) => console.error("Cross-origin isolation bootstrap failed.", error));
+      })();
+    </script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

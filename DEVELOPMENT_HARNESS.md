@@ -74,6 +74,20 @@ Pin after the first scaffold:
 
 Tool versions are operational facts and must live in lock/config files, not this durable specification.
 
+### Phase-0 physical GPU gate
+
+The checked-in gate targets an installed current-stable Google Chrome, launches it headed so the physical adapter is exercised, and does not add experimental WebGPU flags. Install the pinned Rust toolchain through rustup, then install the matching WASM binding CLI:
+
+```sh
+cargo install wasm-bindgen-cli --version 0.2.126 --locked
+npm ci
+npm run gate:physical
+```
+
+`rust-toolchain.toml` supplies Rust `1.89.0`, `rustfmt`, and the `wasm32-unknown-unknown` target. The gate runs the deterministic verifier, native precision benchmark, WASM/browser oracle corpus, and direct WebGPU differential. It rejects a fallback/software adapter and writes machine-readable results below `test-results/`.
+
+Run the same commit and corpus on the AMD and NVIDIA reference machines. A successful AMD result alone does not establish `AT-NUM-009`.
+
 ## 4. Context routing
 
 Before work, read:

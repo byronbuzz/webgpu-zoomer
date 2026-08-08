@@ -21,6 +21,7 @@
     "setup": "node scripts/setup.mjs",
     "test": "vitest run && node --test scripts/tests/*.test.mjs",
     "test:browser": "playwright test",
+    "gate:physical": "node scripts/run-physical-gate.mjs",
     "typecheck": "tsc -b",
     "verify": "node scripts/verify.mjs"
   },

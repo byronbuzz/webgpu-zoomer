@@ -10,6 +10,8 @@ Production hosting must deliver headers/configuration sufficient for a cross-ori
 
 If isolation is missing, production should present a clear unsupported-deployment diagnostic. Do not silently fall back to a materially different unthreaded product and claim normal acceptance.
 
+The GitHub Pages test deployment cannot configure these response headers at the host. It therefore uses a self-hosted, same-origin service worker to add them to controlled responses. The runtime checks for `crossOriginIsolated` and shared-memory availability remain authoritative: if either check fails, numerical execution stays disabled. This test-host mechanism does not by itself promote GitHub Pages as the final production host or relax the production header requirement.
+
 ## Network policy
 
 After the application and its static assets are loaded, fractal calculation must require no network access.

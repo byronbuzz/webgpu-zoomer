@@ -74,10 +74,17 @@ All decisions below were accepted on 2026-08-08 unless stated otherwise.
 **Decision:** do not reorganize or increment v1.4.  
 **Rationale:** legacy architecture carries unresolved numerical and scheduling assumptions; selective salvage is safer than inherited coupling.
 
+## D-019 — GitHub Pages test deployment
+**Decision:** publish validated `main` builds to the project GitHub Pages site. Because Pages does not expose response-header configuration, the test deployment may use a repository-local service worker to synthesize COOP/COEP for controlled responses.  
+**Constraint:** runtime `crossOriginIsolated`, shared-memory, WebGPU, and numerical gates remain authoritative. Failure stays unsupported or unresolved; the service worker's presence is not acceptance evidence.  
+**Consequence:** this provides a public test surface without silently weakening D-011 or selecting the final production host.
+
 ## RD-001 — Provisional Phase-0 oracle foundation
-**Status:** assumed pending Rust/WASM execution evidence.  
+**Status:** assumed; Windows Rust/WASM and one physical AMD stable-Chromium run pass, while clean-commit evidence preservation and NVIDIA comparison remain pending.  
 **Decision:** use a pure-Rust exact-dyadic recurrence backed by `num-bigint` for the independent deterministic oracle. Treat the direct WebGPU kernel as a candidate generator that cannot publish authority without oracle agreement.  
 **Alternative not admitted in Phase 0:** Rug/GMP/MPFR, because its C-backed build does not directly satisfy the required stable `wasm32-unknown-unknown` browser path.  
 **Rationale:** exact dyadic recurrence makes escape and analytic-interior decisions independently checkable, preserves cap-as-unresolved semantics, and fails insufficient precision before iteration.  
 **Limit:** exact numerator growth may make this unsuitable as the eventual high-throughput reference-orbit implementation; `O-001` therefore remains open.  
 **Promotion gate:** pinned Rust/WASM build, oracle fixtures, browser worker execution, benchmark evidence, and review of resource behaviour.
+
+**Evidence update (2026-08-08):** On the primary Windows machine, Rust 1.89.0 tests passed 4/4, wasm-bindgen crate/CLI 0.2.126 built successfully, and the pure-Rust exact-dyadic benchmark completed 10,000 samples at 1,701 ns/sample on clean commit `2e810f2`. Headed stable Edge 151 on a non-fallback AMD RDNA-4 adapter passed all 10 oracle fixtures and all 4 direct WebGPU comparisons with zero mismatches; the intentional insufficient-bound case remained `unresolved`. The validated bundle is preserved at `evidence/phase-0-amd-rdna4-edge151-2026-08-08/`. This is not branded-Chrome evidence and does not establish NVIDIA/AMD cross-hardware agreement or production resource behaviour.

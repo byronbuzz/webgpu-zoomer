@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
-import { spawnSync } from "node:child_process";
 import { basename, isAbsolute, join, normalize, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
+import { extractZip, listZip } from "./archive-tools.mjs";
 
 const requiredJson = ["manifest.json", "environment.json", "settings.json", "trajectory.json", "results.json", "correctness.json"];
 
@@ -12,9 +12,7 @@ function sha256(path) {
 }
 
 function safeArchiveEntries(path) {
-  const listed = spawnSync("unzip", ["-Z1", path], { encoding: "utf8" });
-  if (listed.status !== 0) throw new Error(`ZIP listing failed: ${listed.stderr.trim()}`);
-  for (const entry of listed.stdout.split(/\r?\n/).filter(Boolean)) {
+  for (const entry of listZip(path)) {
     const normalized = normalize(entry);
     if (isAbsolute(entry) || normalized === ".." || normalized.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`)) {
       throw new Error(`unsafe ZIP entry: ${entry}`);
@@ -35,11 +33,8 @@ export function validateEvidenceTarget(target) {
   try {
     if (bundle.endsWith(".zip")) {
       safeArchiveEntries(bundle);
-      const test = spawnSync("unzip", ["-t", bundle], { encoding: "utf8" });
-      if (test.status !== 0) throw new Error(`ZIP integrity failed: ${test.stderr.trim() || test.stdout.trim()}`);
       temporary = mkdtempSync(join(tmpdir(), "webgpu-zoomer-evidence-"));
-      const extract = spawnSync("unzip", ["-q", bundle, "-d", temporary], { encoding: "utf8" });
-      if (extract.status !== 0) throw new Error(`ZIP extraction failed: ${extract.stderr.trim()}`);
+      extractZip(bundle, temporary);
       bundle = findBundleRoot(temporary);
     }
     if (!statSync(bundle).isDirectory()) throw new Error("evidence target must be a directory or ZIP");

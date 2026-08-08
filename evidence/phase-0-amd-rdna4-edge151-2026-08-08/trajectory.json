@@ -1,0 +1,22 @@
+{
+    "schemaVersion":  1,
+    "type":  "deterministic-sample-corpus",
+    "fixtureIds":  [
+                       "shallow-origin-analytic",
+                       "shallow-exterior-one",
+                       "strict-bailout-equality-then-escape",
+                       "negative-world-coordinate",
+                       "cap-exhausted-minus-two",
+                       "legacy-overlap-boundary-insufficient",
+                       "legacy-deep-repair-storm-insufficient",
+                       "legacy-user-failure-insufficient",
+                       "extreme-exponent-analytic",
+                       "intentional-insufficient-bound"
+                   ],
+    "directGpuFixtureIds":  [
+                                "shallow-exterior-one",
+                                "strict-bailout-equality-then-escape",
+                                "negative-world-coordinate",
+                                "cap-exhausted-minus-two"
+                            ]
+}

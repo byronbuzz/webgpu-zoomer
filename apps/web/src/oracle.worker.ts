@@ -1,16 +1,8 @@
 /// <reference lib="webworker" />
-type WasmOracle = Readonly<{
-  default: () => Promise<void>;
-  evaluate_json: (input: string) => string;
-}>;
+import init, { evaluate_json } from "./generated/wasm/precision_wasm.js";
 
-// Generated into public/wasm by `npm run build:wasm`; absence is a hard runtime diagnostic.
-const wasmModuleUrl: string = "/wasm/precision_wasm.js";
-const ready = import(/* @vite-ignore */ wasmModuleUrl).then(async (module) => {
-  const oracle = module as WasmOracle;
-  await oracle.default();
-  return oracle;
-});
+// Generated into the source graph by `npm run build:wasm`; absence is a hard build diagnostic.
+const ready = init().then(() => ({ evaluate_json }));
 
 self.addEventListener("message", async (event: MessageEvent<{ id: number; request: unknown }>) => {
   const oracle = await ready;
