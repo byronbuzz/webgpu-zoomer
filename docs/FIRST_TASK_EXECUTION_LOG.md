@@ -1,7 +1,7 @@
 # First Task Execution Log
 
 **Date:** 2026-08-08  
-**Workflow position:** partial execution of `FIRST_TASK.md`; no explorer/presenter work has begun.
+**Workflow position:** historical initial execution record. The unavailable-tool findings below were later repaired and superseded by `docs/FIRST_TASK_COMPLETION_REPORT.md` and the validated physical evidence bundle. No unexecuted result in this historical log should be read as current state.
 
 ## Scope and invariants
 

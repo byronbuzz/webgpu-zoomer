@@ -1,7 +1,7 @@
 # Project State
 
 **State date:** 2026-08-08  
-**Project phase:** `FIRST_TASK.md` implementation is executing on physical Windows hardware. Deterministic Node/TypeScript and Rust gates, the pinned WASM build, the exact-dyadic benchmark, and the headed stable-Chromium WebGPU corpus pass on the primary AMD RDNA-4 machine using Edge 151. Clean-commit evidence is preserved under `evidence/phase-0-amd-rdna4-edge151-2026-08-08/`. The validated `main` build is live at `https://byronbuzz.github.io/webgpu-zoomer/` and passes the same headed Edge corpus on the deployed origin; branded Chrome and NVIDIA cross-hardware comparison remain open.
+**Project phase:** `FIRST_TASK.md` is reviewed complete on the primary AMD validation machine. The completion review is preserved in `docs/FIRST_TASK_COMPLETION_REPORT.md`; clean-commit evidence is under `evidence/phase-0-amd-rdna4-edge151-2026-08-08/`. The validated `main` build is live at `https://byronbuzz.github.io/webgpu-zoomer/`. The next bounded slice is a shallow, explicitly non-authoritative WebGPU Mandelbrot canvas; exact-camera interaction follows before deep perturbation or production scheduling. Branded Chrome and NVIDIA cross-hardware comparison remain open.
 
 ## Settled
 
@@ -26,6 +26,7 @@
 - S-019 — The clean successor repository is the public GitHub repository `byronbuzz/webgpu-zoomer`; the legacy `byronbuzz/mandelbrot-zoomer` repository remains separate.
 - S-020 — The primary physical-validation machine is an Intel Core Ultra 9 285K system with 64 GB RAM and an AMD Radeon RX 9070 XT. Windows reports driver `32.0.31019.2002`; the headed browser gate independently confirms a non-fallback AMD `rdna-4` WebGPU adapter.
 - S-021 — GitHub Pages Actions deployment is enabled at `https://byronbuzz.github.io/webgpu-zoomer/`. Workflow run `31238819356` built merge commit `e790835` only after `npm run verify` passed, then deployed successfully. The live-origin PowerShell command `$env:WEBGPU_ZOOMER_BASE_URL='https://byronbuzz.github.io/webgpu-zoomer/'; $env:WEBGPU_ZOOMER_BROWSER_CHANNEL='msedge'; npm run test:browser` passed 2/2: `crossOriginIsolated`, shared memory, and non-fallback AMD RDNA-4 WebGPU were true; all 10 oracle fixtures and 4 GPU differentials matched; cap exhaustion and intentional insufficient precision remained `unresolved`.
+- S-022 — `FIRST_TASK.md` completion criteria and required evidence were reviewed against the clean repository, physical bundle, deployed-origin result, and remaining limitations. Phase 0 is complete on the primary AMD machine; this does not promote branded-Chrome or NVIDIA cross-hardware claims. The next task is the bounded shallow visual slice defined in `docs/FIRST_TASK_COMPLETION_REPORT.md`.
 
 ## Assumed
 
@@ -67,5 +68,5 @@ These are research/implementation questions, not reasons to change the product c
 
 - N-001 — Run the default branded-Chrome channel when Chrome can be installed. Do not relabel the passing Edge 151 result as Chrome evidence.
 - N-002 — Run the same frozen browser corpus on a qualifying NVIDIA system and compare semantic results before any `AT-NUM-009` cross-hardware correctness claim.
-- N-003 — Review the preserved AMD bundle and remaining `FIRST_TASK.md` completion criteria, then select the next executable numerical-spine task.
-- N-004 — Do not begin the explorer presenter, perturbation, rebasing, series/BLA, or production scheduling until the remaining `FIRST_TASK.md` completion evidence is preserved and reviewed.
+- N-003 — Implement the bounded shallow WebGPU Mandelbrot canvas selected by the Phase-0 completion review. Keep it explicitly non-authoritative and separate from accepted numerical state.
+- N-004 — After the visual smoke slice, bind interaction to the exact dyadic camera and add focus/round-trip browser tests before perturbation, rebasing, series/BLA, or production scheduling.
