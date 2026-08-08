@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "composite": true, "outDir": "dist-ts", "rootDir": "src", "lib": ["ES2024", "DOM"] },
+  "references": [
+    { "path": "../exact-camera" },
+    { "path": "../presentation-snapshot" }
+  ],
+  "include": ["src/**/*.ts"]
+}

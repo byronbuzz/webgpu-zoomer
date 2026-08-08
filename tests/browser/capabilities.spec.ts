@@ -71,6 +71,16 @@ type HarnessResult = Readonly<{
       displayValue: { escapeIterations: number } | null;
     }>;
   };
+  presentationComposite: {
+    status: "composited" | "dropped";
+    reason?: string;
+    snapshotId?: string;
+    checksum?: string;
+    cellCount?: number;
+    acceptedCount?: number;
+    unresolvedCount?: number;
+    transformErrorLimitPx?: number;
+  };
 }>;
 
 type WorkDiagnostics = {
@@ -234,6 +244,17 @@ test("WASM oracle and direct WebGPU corpus pass conservatively", async ({ page, 
   expect(result.presentationSnapshot.cells
     .filter((cell) => cell.source === "unresolved")
     .every((cell) => cell.reason === "not_published" && cell.displayValue === null)).toBe(true);
+  expect(result.presentationComposite).toEqual({
+    status: "composited",
+    snapshotId: "presentation-snapshot:fnv1a64:5c836dd98a60753e",
+    checksum: "fnv1a64:5c836dd98a60753e",
+    cellCount: 312,
+    acceptedCount: 274,
+    unresolvedCount: 38,
+    transformErrorLimitPx: 0.25,
+  });
+  await expect(page.locator("#preview")).toHaveAttribute("data-snapshot-state", "composited");
+  await expect(page.locator("#preview")).toHaveAttribute("data-snapshot-checksum", "fnv1a64:5c836dd98a60753e");
   expect(result.acceptedStore).toHaveLength(3);
   expect(result.acceptedStore.map((sample) => sample.key)).toEqual([
     "mandelbrot:1:-17p-3:0p0:1",
@@ -244,6 +265,27 @@ test("WASM oracle and direct WebGPU corpus pass conservatively", async ({ page, 
     && sample.qualityTier === "exact-oracle-agreement"
     && sample.errorSummary.contract === "exact-oracle-iteration-agreement"
     && sample.acceptedEpoch === "0")).toBe(true);
+});
+
+test("composited snapshot invalidates on exact-camera change without changing numerical evidence", async ({ page }) => {
+  await page.goto("./");
+  await waitForIsolation(page);
+  await page.locator("details.diagnostics").evaluate((details: HTMLDetailsElement) => { details.open = true; });
+  await page.getByRole("button", { name: "Run deterministic corpus" }).click();
+  await expect(page.locator("#results")).toHaveAttribute("data-state", "passed", { timeout: 120_000 });
+  await expect(page.locator("#preview")).toHaveAttribute("data-snapshot-state", "composited");
+  const before = JSON.parse(await page.locator("#results").innerText()) as HarnessResult;
+  const cameraBefore = await readCamera(page);
+  const bounds = await page.locator("#mandelbrot").boundingBox();
+  if (!bounds) throw new Error("Mandelbrot canvas has no layout bounds.");
+  await page.mouse.move(bounds.x + bounds.width * 0.5, bounds.y + bounds.height * 0.5);
+  await page.mouse.wheel(0, -100);
+  await expect.poll(async () => (await readCamera(page)).epoch > cameraBefore.epoch).toBe(true);
+  await expect(page.locator("#preview")).toHaveAttribute("data-snapshot-state", "invalidated");
+  await expect(page.locator("#preview")).not.toHaveAttribute("data-snapshot-checksum", /.+/);
+  const after = JSON.parse(await page.locator("#results").innerText()) as HarnessResult;
+  expect(after.summary.acceptedStoreChecksum).toBe(before.summary.acceptedStoreChecksum);
+  expect(after.summary.scheduledStoreChecksum).toBe(before.summary.scheduledStoreChecksum);
 });
 
 test("numerical diagnostics do not gate exact-camera input", async ({ page }) => {

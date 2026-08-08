@@ -32,7 +32,12 @@ import {
   type NumericalWorkItem,
   type WorkCompletion,
 } from "@webgpu-zoomer/numerical-work";
-import { createPresentationSnapshot } from "@webgpu-zoomer/presentation-snapshot";
+import {
+  createSnapshotCompositor,
+  prepareSnapshotComposite,
+  type SnapshotCompositor,
+} from "@webgpu-zoomer/presentation-compositor";
+import { createPresentationSnapshot, type PresentationSnapshot } from "@webgpu-zoomer/presentation-snapshot";
 import { planViewportSampleGrid, serializeSamplePlan } from "@webgpu-zoomer/view-planner";
 import "./style.css";
 
@@ -75,6 +80,7 @@ const runButton = document.querySelector<HTMLButtonElement>("#run")!;
 const previewNode = document.querySelector<HTMLElement>("#preview")!;
 const previewStatusNode = document.querySelector<HTMLElement>("#preview-status")!;
 const canvas = document.querySelector<HTMLCanvasElement>("#mandelbrot")!;
+const snapshotCanvas = document.querySelector<HTMLCanvasElement>("#snapshot-overlay")!;
 const cameraReadout = document.querySelector<HTMLElement>("#camera-readout")!;
 const resetButton = document.querySelector<HTMLButtonElement>("#reset-view")!;
 
@@ -86,11 +92,15 @@ let renderPreview = () => {};
 let currentPresentationView: MandelbrotPreviewView | undefined;
 let drawPresentationView = (_view: MandelbrotPreviewView) => {};
 let transitionFrame = 0;
+let snapshotCompositor: SnapshotCompositor | undefined;
+let snapshotCompositorReady: Promise<SnapshotCompositor> | undefined;
+let activePresentationSnapshot: PresentationSnapshot | undefined;
 const motionFrameDurations: number[] = [];
 let motionFrameCount = 0;
 let maximumFocusErrorPx = 0;
 previewNode.dataset.focusQuantizationBits = pointerFocusFractionBits.toString();
 previewNode.dataset.presentationAuthority = "presentation-only";
+previewNode.dataset.snapshotState = "none";
 
 const capabilities = {
   crossOriginIsolated,
@@ -111,6 +121,45 @@ function getGpuSession(): Promise<{ adapter: GPUAdapter; device: GPUDevice; envi
     return { adapter, device, environment: adapterEvidence(adapter) };
   })();
   return gpuSession;
+}
+
+function getSnapshotCompositor(): Promise<SnapshotCompositor> {
+  snapshotCompositorReady ??= getGpuSession()
+    .then(({ device }) => createSnapshotCompositor(device, snapshotCanvas))
+    .then((compositor) => {
+      snapshotCompositor = compositor;
+      return compositor;
+    });
+  return snapshotCompositorReady;
+}
+
+function clearPresentationSnapshot(state: "none" | "invalidated" = "none"): void {
+  activePresentationSnapshot = undefined;
+  snapshotCompositor?.clear();
+  previewNode.dataset.snapshotState = state;
+  delete previewNode.dataset.snapshotChecksum;
+}
+
+async function compositePresentationSnapshot(snapshot: PresentationSnapshot) {
+  const prepared = prepareSnapshotComposite(snapshot, cameraAuthority, canvas.width, canvas.height);
+  if (!prepared.accepted) {
+    clearPresentationSnapshot("invalidated");
+    return Object.freeze({ status: "dropped" as const, reason: prepared.reason });
+  }
+  const compositor = await getSnapshotCompositor();
+  compositor.render(prepared);
+  activePresentationSnapshot = snapshot;
+  previewNode.dataset.snapshotState = "composited";
+  previewNode.dataset.snapshotChecksum = snapshot.checksum;
+  return Object.freeze({
+    status: "composited" as const,
+    snapshotId: prepared.snapshotId,
+    checksum: prepared.checksum,
+    cellCount: prepared.cellCount,
+    acceptedCount: prepared.acceptedCount,
+    unresolvedCount: prepared.unresolvedCount,
+    transformErrorLimitPx: prepared.transformErrorLimitPx,
+  });
 }
 
 function recordLimits(limits: GPUSupportedLimits): Record<string, number> {
@@ -260,6 +309,7 @@ function worldAtFocus(camera: ExactCamera, focus: { x: ExactDyadic; y: ExactDyad
 }
 
 function applyExactZoom(focus: { x: ExactDyadic; y: ExactDyadic }, exponentDelta: -1n | 1n): void {
+  clearPresentationSnapshot("invalidated");
   previewNode.dataset.lastFocus = JSON.stringify({
     x: serializeDyadic(focus.x),
     y: serializeDyadic(focus.y),
@@ -326,6 +376,7 @@ function installCameraInteraction(): void {
   }, { passive: false });
   resetButton.addEventListener("click", () => {
     cancelAnimationFrame(transitionFrame);
+    clearPresentationSnapshot("invalidated");
     cameraAuthority = createCamera(
       initialCamera.centerX,
       initialCamera.centerY,
@@ -339,15 +390,21 @@ function installCameraInteraction(): void {
 async function initializePreview(): Promise<void> {
   try {
     const { device, environment } = await getGpuSession();
-    const preview = await createMandelbrotPreview(device, canvas);
+    const [preview] = await Promise.all([
+      createMandelbrotPreview(device, canvas),
+      getSnapshotCompositor(),
+    ]);
     const adapterLabel = `${environment.info.vendor || "WebGPU"} ${environment.info.architecture}`.trim();
     drawPresentationView = (view) => {
       const density = Math.min(window.devicePixelRatio, 2);
       const width = Math.max(1, Math.round(canvas.clientWidth * density));
       const height = Math.max(1, Math.round(canvas.clientHeight * density));
       if (canvas.width !== width || canvas.height !== height) {
+        if (activePresentationSnapshot) clearPresentationSnapshot("invalidated");
         canvas.width = width;
         canvas.height = height;
+        snapshotCanvas.width = width;
+        snapshotCanvas.height = height;
       }
       const f32View = {
         centerX: Math.fround(view.centerX),
@@ -567,6 +624,7 @@ runButton.addEventListener("click", async () => {
         acceptedSamples: scheduledAcceptedSnapshot,
         unresolvedCoverage,
       });
+      const presentationComposite = await compositePresentationSnapshot(presentationSnapshot);
       const summary = {
         fixtureCount: corpus.cases.length,
         oracleMismatchCount: oracleChecks.filter((entry) => !entry.matches).length,
@@ -601,11 +659,18 @@ runButton.addEventListener("click", async () => {
         && presentationSnapshot.counts.unresolved === workDiagnostics.unresolvedItems
         && presentationSnapshot.counts.accepted + presentationSnapshot.counts.unresolved
           === presentationSnapshot.counts.total;
+      const presentationCompositePassed = presentationComposite.status === "composited"
+        ? presentationComposite.checksum === presentationSnapshot.checksum
+          && presentationComposite.cellCount === presentationSnapshot.counts.total
+          && presentationComposite.acceptedCount === presentationSnapshot.counts.accepted
+          && presentationComposite.unresolvedCount === presentationSnapshot.counts.unresolved
+        : presentationComposite.reason === "camera_mismatch" || presentationComposite.reason === "viewport_mismatch";
       const passed = summary.oracleMismatchCount === 0
         && summary.gpuMismatchCount === 0
         && summary.intentionalInsufficientBoundPassed
         && scheduledPassed
         && presentationPassed
+        && presentationCompositePassed
         && !summary.fallbackAdapter;
       resultNode.textContent = JSON.stringify({
         schemaVersion: 1,
@@ -622,6 +687,7 @@ runButton.addEventListener("click", async () => {
           acceptedStore: scheduledAcceptedSnapshot,
         },
         presentationSnapshot,
+        presentationComposite,
         acceptedStore: acceptedSnapshot,
         oracleChecks,
         differentialChecks,
