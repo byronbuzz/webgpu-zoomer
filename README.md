@@ -17,6 +17,8 @@ npm run verify
 
 Run the isolated development server with `npm run dev`. The Vite server supplies COOP/COEP headers. The browser harness reports cross-origin isolation, shared-memory availability, and WebGPU capability before enabling tests.
 
+On a physical AMD or NVIDIA validation machine with current stable Google Chrome and the pinned Rust/WASM tooling installed, run `npm run gate:physical`. This uses headed stable Chrome without experimental WebGPU flags, rejects fallback adapters, executes the complete Phase-0 WASM-oracle/WebGPU differential corpus, and writes evidence under `test-results/`.
+
 ## Authority
 
 Read `00_START_HERE.md`, `PROJECT_STATE.md`, and `FIRST_TASK.md` first. `AUTHORITY_REGISTER.md` and `MIGRATION.md` govern all use of legacy evidence.

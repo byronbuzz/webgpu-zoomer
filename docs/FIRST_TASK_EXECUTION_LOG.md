@@ -33,6 +33,8 @@ Legacy use was limited to reading five named JSON fixtures. Coordinates and prov
 | `cargo run --release -p precision --example benchmark` | 127 | Benchmark unexecuted because `cargo` is unavailable. |
 | `npm run test:browser` (first attempt) | 1 | Incorrect root-script argument forwarding prevented Vite startup; Playwright configuration repaired. |
 | `npm run test:browser` (after repair) | 1 | Vite started; Playwright stopped because its Chromium executable is not installed. No browser assertion executed. |
+| `npm run test:browser` (physical-gate harness revision) | 1 | Vite started and the new full differential suite was discovered; execution stopped specifically because stable Google Chrome is absent at `/opt/google/chrome/chrome`. No browser assertion executed. |
+| `npm run gate:physical` | 127 | Fixture validation, TypeScript, and 11 deterministic tests passed; the gate then stopped at unavailable `cargo`, wrote a failure summary, and did not execute the benchmark or browser stages. |
 | GitHub connector repository check | success | `byronbuzz/webgpu-zoomer` exists, is public, is empty before publication, and grants the connected identity administrative/write permission. |
 
 ## Implemented outputs
@@ -42,6 +44,7 @@ Legacy use was limited to reading five named JSON fixtures. Coordinates and prov
 - deterministic fixture corpus spanning shallow, boundary, deep legacy coordinates, insufficient precision, negative coordinates, and exponent `-20000`;
 - minimal f32 WebGPU direct compute harness and an oracle-gated differential publication contract;
 - cross-origin-isolated Vite browser/worker harness with explicit capability diagnostics;
+- headed stable-Chrome physical gate that records adapter identity/features/limits, rejects fallback adapters, checks every WASM oracle result against the fixture corpus, executes four direct WebGPU differentials, verifies the intentional insufficient-bound outcome, and emits JSON evidence;
 - evidence bundle validator that checks required JSON, checksums, safe ZIP entries, and ZIP integrity;
 - pure-Rust versus MPFR candidate assessment and an executable pure-Rust benchmark target.
 
@@ -49,6 +52,7 @@ Legacy use was limited to reading five named JSON fixtures. Coordinates and prov
 
 - Rust formatting, tests, native benchmark, WASM compilation, and WASM fixture execution were not run because Rust/cargo/wasm-bindgen are absent.
 - Chromium/WebGPU capability, shader execution, differential results, and shared-memory browser worker behaviour were not run because Chromium is absent.
+- The primary AMD machine was reported as Core Ultra 9 285K, 64 GB RAM, and “RX 7090 XT”. The gate must capture the exact adapter string before the likely RX 9070 XT identity is recorded as evidence.
 - AMD/NVIDIA cross-hardware evidence was not run in this environment.
 - The Vite bundle is a source-integrity result, not a runnable production acceptance result until the WASM artefact is built.
 - The clean successor tree was published to the public `byronbuzz/webgpu-zoomer` repository through the connected GitHub app. The legacy `byronbuzz/mandelbrot-zoomer` repository was deliberately not reused.

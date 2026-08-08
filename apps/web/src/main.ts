@@ -10,7 +10,24 @@ type Fixture = {
   precisionBits: number;
   bailoutSquared: number;
   gpuDirect?: { cRe: number; cIm: number };
+  expected: {
+    status: OracleResult["status"];
+    reason: OracleResult["reason"];
+    iterations: number;
+  };
 };
+
+type AdapterEvidence = Readonly<{
+  info: Readonly<{
+    vendor: string;
+    architecture: string;
+    device: string;
+    description: string;
+    isFallbackAdapter: boolean;
+  }>;
+  features: string[];
+  limits: Record<string, number>;
+}>;
 
 const capabilityNode = document.querySelector<HTMLElement>("#capabilities")!;
 const resultNode = document.querySelector<HTMLElement>("#results")!;
@@ -20,8 +37,32 @@ const capabilities = {
   crossOriginIsolated,
   sharedArrayBuffer: typeof SharedArrayBuffer !== "undefined",
   webGpu: "gpu" in navigator,
+  userAgent: navigator.userAgent,
 };
 capabilityNode.textContent = JSON.stringify(capabilities, null, 2);
+
+function recordLimits(limits: GPUSupportedLimits): Record<string, number> {
+  const output: Record<string, number> = {};
+  const keys = new Set([
+    ...Object.keys(limits),
+    ...Object.getOwnPropertyNames(Object.getPrototypeOf(limits) as object),
+  ]);
+  keys.delete("constructor");
+  for (const key of [...keys].sort()) {
+    const value = limits[key as keyof GPUSupportedLimits];
+    if (typeof value === "number") output[key] = value;
+  }
+  return output;
+}
+
+function adapterEvidence(adapter: GPUAdapter): AdapterEvidence {
+  const { vendor, architecture, device, description, isFallbackAdapter } = adapter.info;
+  return {
+    info: { vendor, architecture, device, description, isFallbackAdapter },
+    features: [...adapter.features].sort(),
+    limits: recordLimits(adapter.limits),
+  };
+}
 
 let messageId = 0;
 function evaluateInWorker(worker: Worker, request: unknown): Promise<OracleResult> {
@@ -40,6 +81,7 @@ function evaluateInWorker(worker: Worker, request: unknown): Promise<OracleResul
 
 runButton.addEventListener("click", async () => {
   runButton.disabled = true;
+  resultNode.dataset.state = "running";
   try {
     if (!capabilities.crossOriginIsolated || !capabilities.sharedArrayBuffer) {
       throw new Error("Cross-origin isolation/shared memory requirement is not satisfied.");
@@ -61,6 +103,7 @@ runButton.addEventListener("click", async () => {
       const adapter = await navigator.gpu.requestAdapter();
       if (!adapter) throw new Error("WebGPU adapter request returned null.");
       const device = await adapter.requestDevice();
+      const environment = adapterEvidence(adapter);
       const directIndexes = corpus.cases.flatMap((fixture, index) => fixture.gpuDirect ? [index] : []);
       const directSamples: DirectSample[] = directIndexes.map((index) => {
         const fixture = corpus.cases[index]!;
@@ -74,19 +117,57 @@ runButton.addEventListener("click", async () => {
       const gpuResults = await (await createDirectHarness(device))(directSamples);
       const differential = gpuResults.map((gpu, offset) => {
         const index = directIndexes[offset]!;
+        const oracleResult = oracle[index]!;
         return {
           id: corpus.cases[index]!.id,
           gpu,
-          oracle: oracle[index],
-          comparison: compareGpuCandidate(gpu.candidate, oracle[index]!),
+          oracle: oracleResult,
+          comparison: compareGpuCandidate(gpu.candidate, oracleResult),
         };
       });
-      resultNode.textContent = JSON.stringify({ capabilities, oracle, differential }, null, 2);
+      const oracleChecks = corpus.cases.map((fixture, index) => {
+        const actual = oracle[index]!;
+        const matches = actual.status === fixture.expected.status
+          && actual.reason === fixture.expected.reason
+          && actual.iterations === fixture.expected.iterations;
+        return { id: fixture.id, expected: fixture.expected, actual, matches };
+      });
+      const differentialChecks = differential.map((entry) => ({
+        ...entry,
+        matches: entry.gpu.candidate.status === entry.oracle.status
+          && entry.gpu.candidate.iterations === entry.oracle.iterations,
+      }));
+      const intentionalInsufficient = oracleChecks.find((entry) => entry.id === "intentional-insufficient-bound");
+      const summary = {
+        fixtureCount: corpus.cases.length,
+        oracleMismatchCount: oracleChecks.filter((entry) => !entry.matches).length,
+        gpuDifferentialCount: differentialChecks.length,
+        gpuMismatchCount: differentialChecks.filter((entry) => !entry.matches).length,
+        acceptedGpuEscapes: differentialChecks.filter((entry) => entry.comparison.accepted).length,
+        intentionalInsufficientBoundPassed: intentionalInsufficient?.actual.status === "unresolved"
+          && intentionalInsufficient.actual.reason === "insufficient_precision",
+        fallbackAdapter: environment.info.isFallbackAdapter,
+      };
+      const passed = summary.oracleMismatchCount === 0
+        && summary.gpuMismatchCount === 0
+        && summary.intentionalInsufficientBoundPassed
+        && !summary.fallbackAdapter;
+      resultNode.textContent = JSON.stringify({
+        schemaVersion: 1,
+        status: passed ? "passed" : "failed",
+        capabilities,
+        environment,
+        summary,
+        oracleChecks,
+        differentialChecks,
+      }, null, 2);
+      resultNode.dataset.state = passed ? "passed" : "failed";
     } finally {
       worker.terminate();
     }
   } catch (error) {
     resultNode.textContent = JSON.stringify({ capabilities, error: error instanceof Error ? error.message : String(error) }, null, 2);
+    resultNode.dataset.state = "error";
   } finally {
     runButton.disabled = false;
   }

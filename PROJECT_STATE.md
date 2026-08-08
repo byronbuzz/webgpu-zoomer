@@ -1,7 +1,7 @@
 # Project State
 
 **State date:** 2026-08-08  
-**Project phase:** `FIRST_TASK.md` implementation authored and published; deterministic Node/TypeScript gates pass, while Rust/WASM, browser/WebGPU, benchmark, and physical-hardware gates remain unexecuted due missing local tooling.
+**Project phase:** `FIRST_TASK.md` implementation authored; deterministic Node/TypeScript gates and a full physical-browser evidence path are in place, while Rust/WASM, browser/WebGPU, benchmark, and physical-hardware gates remain unexecuted due missing local tooling.
 
 ## Settled
 
@@ -36,6 +36,7 @@
 - A-007 — Performance thresholds will be expressed in frame budgets and normalized workload metrics, then calibrated on two physical reference systems before release.
 - A-008 — Phase-0 numerical authority uses a pure-Rust exact-dyadic recurrence built on `num-bigint`; this is provisionally chosen as the deterministic oracle, not yet as the production high-throughput reference generator.
 - A-009 — The direct WebGPU Phase-0 kernel produces non-authoritative candidates. Only exact oracle agreement can accept an escaped result in this experimental harness.
+- A-010 — The primary AMD physical-validation machine is an Intel Core Ultra 9 285K system with 64 GB RAM and probably a Radeon RX 9070 XT. The user reported “RX 7090 XT”; the exact adapter string remains unconfirmed until captured by the browser gate.
 
 ## Open
 
@@ -46,6 +47,7 @@
 - O-005 — Maximum resident GPU memory budget as a fraction/absolute cap on reference systems.
 - O-006 — Exact conservative error model for GPU recurrence and reference transport.
 - O-007 — Whether certified interior beyond analytic cardioid/bulb tests will include additional proof methods in v1.
+- O-008 — Exact AMD adapter model/driver for the primary physical run; the headed stable-Chrome gate now records the browser-reported adapter identity and rejects fallback/software adapters.
 
 These are research/implementation questions, not reasons to change the product contract.
 
@@ -62,6 +64,6 @@ These are research/implementation questions, not reasons to change the product c
 ## Next
 
 - N-001 — Install the pinned Rust/WASM toolchain, then run `cargo fmt --all -- --check`, `cargo test --workspace`, `npm run build:wasm`, and the precision example benchmark. Repair only evidence-backed failures.
-- N-002 — On current stable Chromium with WebGPU, run the isolated browser capability and direct differential gates; capture adapter/browser evidence and the intentional insufficient-bound outcome.
+- N-002 — On the primary AMD machine, run `npm run gate:physical` in current stable Google Chrome. The gate now executes all ten WASM oracle fixtures, four direct WebGPU comparisons, the intentional insufficient-bound case, and captures adapter/browser evidence; review and preserve the resulting machine-readable artefacts.
 - N-003 — Run the same browser corpus on qualifying AMD and NVIDIA systems before any cross-hardware correctness claim.
 - N-004 — Do not begin the explorer presenter, perturbation, rebasing, series/BLA, or production scheduling until `FIRST_TASK.md` completion gates are evidenced.
