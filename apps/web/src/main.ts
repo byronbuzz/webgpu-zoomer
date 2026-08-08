@@ -1,12 +1,14 @@
 import {
   createDirectHarness,
   createMandelbrotPreview,
+  type DirectHarnessResult,
   type DirectSample,
   type MandelbrotPreviewView,
 } from "@webgpu-zoomer/gpu-engine";
 import {
   add,
   createCamera,
+  deserializeDyadic,
   dyadic,
   multiply,
   serializeCamera,
@@ -22,6 +24,11 @@ import {
   evaluateShallowDirectPublication,
   type OracleResult,
 } from "@webgpu-zoomer/numerical-contract";
+import {
+  AsyncWorkAdmission,
+  type NumericalWorkItem,
+  type WorkCompletion,
+} from "@webgpu-zoomer/numerical-work";
 import { planSquareSampleGrid, serializeSamplePlan } from "@webgpu-zoomer/view-planner";
 import "./style.css";
 
@@ -398,6 +405,49 @@ function evaluateInWorker(worker: Worker, request: unknown): Promise<OracleResul
   });
 }
 
+function exactF32Coordinate(value: { numerator: string; exponent: string }): number | undefined {
+  const approximation = approximateDyadic(deserializeDyadic(value));
+  if (!approximation || approximation.absoluteError !== 0) return undefined;
+  const f32 = Math.fround(approximation.value);
+  return Object.is(f32, approximation.value) ? f32 : undefined;
+}
+
+async function executePlannedShallowBatch(
+  items: readonly NumericalWorkItem[],
+  worker: Worker,
+  runDirect: (samples: readonly DirectSample[]) => Promise<DirectHarnessResult[]>,
+): Promise<readonly WorkCompletion[]> {
+  const oraclePromise = Promise.all(items.map((item) => evaluateInWorker(worker, {
+    schemaVersion: 1,
+    cRe: item.identity.cRe,
+    cIm: item.identity.cIm,
+    iterationCap: item.progress.iterationBudget,
+    precisionBits: 64,
+    bailoutSquared: 4,
+  })));
+  const directIndexes: number[] = [];
+  const directSamples: DirectSample[] = [];
+  items.forEach((item, index) => {
+    const cRe = exactF32Coordinate(item.identity.cRe);
+    const cIm = exactF32Coordinate(item.identity.cIm);
+    if (cRe === undefined || cIm === undefined) return;
+    directIndexes.push(index);
+    directSamples.push({ cRe, cIm, iterationCap: item.progress.iterationBudget, bailoutSquared: 4 });
+  });
+  const [oracle, gpuResults] = await Promise.all([oraclePromise, runDirect(directSamples)]);
+  const gpuByIndex = new Map(directIndexes.map((itemIndex, offset) => [itemIndex, gpuResults[offset]!]));
+  return items.map((item, index) => ({
+    workId: item.id,
+    key: item.key,
+    requestEpoch: item.requestEpoch,
+    methodVersion: item.method.version,
+    oracleVersion: item.reference.version,
+    candidate: gpuByIndex.get(index)?.candidate
+      ?? { status: "unresolved", iterations: 0, reason: "gpu_candidate_only" },
+    oracle: oracle[index]!,
+  }));
+}
+
 runButton.addEventListener("click", async () => {
   runButton.disabled = true;
   resultNode.dataset.state = "running";
@@ -428,6 +478,7 @@ runButton.addEventListener("click", async () => {
       });
 
       const { device, environment } = await getGpuSession();
+      const runDirect = await createDirectHarness(device);
       const directIndexes = corpus.cases.flatMap((fixture, index) => fixture.gpuDirect ? [index] : []);
       const directSamples: DirectSample[] = directIndexes.map((index) => {
         const fixture = corpus.cases[index]!;
@@ -438,7 +489,7 @@ runButton.addEventListener("click", async () => {
           bailoutSquared: fixture.bailoutSquared,
         };
       });
-      const gpuResults = await (await createDirectHarness(device))(directSamples);
+      const gpuResults = await runDirect(directSamples);
       const acceptedStore = new AcceptedNumericalStore();
       const differential = gpuResults.map((gpu, offset) => {
         const index = directIndexes[offset]!;
@@ -482,6 +533,22 @@ runButton.addEventListener("click", async () => {
           && entry.gpu.candidate.iterations === entry.oracle.iterations,
       }));
       const intentionalInsufficient = oracleChecks.find((entry) => entry.id === "intentional-insufficient-bound");
+      const scheduledStore = new AcceptedNumericalStore();
+      const workAdmission = new AsyncWorkAdmission(scheduledStore, {
+        maximumPendingItems: 512,
+        iterationBudget: 8,
+        methodVersion: "gpu-direct-f32-v1",
+        oracleVersion: corpus.oracleVersion,
+      });
+      const admissionStart = performance.now();
+      const admission = workAdmission.admit(
+        samplePlan,
+        (items) => executePlannedShallowBatch(items, worker, runDirect),
+      );
+      const admissionCallMs = performance.now() - admissionStart;
+      const workImmediatelyAfterAdmission = workAdmission.diagnostics();
+      await workAdmission.whenIdle();
+      const workDiagnostics = workAdmission.diagnostics();
       const acceptedSnapshot = acceptedStore.snapshot();
       const summary = {
         fixtureCount: corpus.cases.length,
@@ -493,6 +560,8 @@ runButton.addEventListener("click", async () => {
         plannedSampleCount: samplePlan.samples.length,
         samplePlanChecksum: samplePlan.checksum,
         samplePlanLevel: samplePlan.level.toString(),
+        scheduledAcceptedCount: scheduledStore.size,
+        scheduledStoreChecksum: scheduledStore.checksum(),
         intentionalInsufficientBoundPassed: intentionalInsufficient?.actual.status === "unresolved"
           && intentionalInsufficient.actual.reason === "insufficient_precision",
         fallbackAdapter: environment.info.isFallbackAdapter,
@@ -508,6 +577,13 @@ runButton.addEventListener("click", async () => {
         environment,
         summary,
         samplePlan: serializeSamplePlan(samplePlan),
+        workAdmission: {
+          admission: { ...admission, requestEpoch: admission.requestEpoch.toString() },
+          admissionCallMs,
+          immediatelyAfterAdmission: workImmediatelyAfterAdmission,
+          settled: workDiagnostics,
+          acceptedStore: scheduledStore.snapshot(),
+        },
         acceptedStore: acceptedSnapshot,
         oracleChecks,
         differentialChecks,

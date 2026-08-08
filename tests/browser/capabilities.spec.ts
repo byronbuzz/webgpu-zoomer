@@ -25,6 +25,8 @@ type HarnessResult = Readonly<{
     plannedSampleCount: number;
     samplePlanChecksum: string;
     samplePlanLevel: string;
+    scheduledAcceptedCount: number;
+    scheduledStoreChecksum: string;
     intentionalInsufficientBoundPassed: boolean;
     fallbackAdapter: boolean;
   };
@@ -43,7 +45,29 @@ type HarnessResult = Readonly<{
     level: string;
     samples: Array<{ level: string; x: string; y: string }>;
   };
+  workAdmission: {
+    admission: { accepted: boolean; reason: string; itemCount: number; requestEpoch: string };
+    admissionCallMs: number;
+    immediatelyAfterAdmission: WorkDiagnostics;
+    settled: WorkDiagnostics;
+    acceptedStore: Array<{ acceptedEpoch: string }>;
+  };
 }>;
+
+type WorkDiagnostics = {
+  activeEpoch: string | null;
+  pendingItems: number;
+  activeBatches: number;
+  admittedItems: number;
+  completedItems: number;
+  publishedItems: number;
+  unresolvedItems: number;
+  staleItems: number;
+  conflictItems: number;
+  failedItems: number;
+  budgetRejectedItems: number;
+  admissionReturnsPromise: boolean;
+};
 
 async function waitForIsolation(page: import("playwright/test").Page): Promise<void> {
   await expect.poll(async () => {
@@ -125,6 +149,8 @@ test("WASM oracle and direct WebGPU corpus pass conservatively", async ({ page, 
     acceptedGpuEscapes: 3,
     plannedSampleCount: 144,
     samplePlanLevel: "-2",
+    scheduledAcceptedCount: 106,
+    scheduledStoreChecksum: "fnv1a64:9ce7d1780d69bde1",
     intentionalInsufficientBoundPassed: true,
     fallbackAdapter: false,
   });
@@ -139,6 +165,38 @@ test("WASM oracle and direct WebGPU corpus pass conservatively", async ({ page, 
   expect(result.samplePlan.samples).toHaveLength(144);
   expect(result.samplePlan.samples[0]).toMatchObject({ level: "-2", x: "-8", y: "-6" });
   expect(result.samplePlan.samples.at(-1)).toMatchObject({ level: "-2", x: "3", y: "5" });
+  expect(result.workAdmission.admission).toEqual({
+    accepted: true,
+    reason: "admitted",
+    itemCount: 144,
+    requestEpoch: "0",
+  });
+  expect(result.workAdmission.admissionCallMs).toBeLessThan(50);
+  expect(result.workAdmission.immediatelyAfterAdmission).toMatchObject({
+    activeEpoch: "0",
+    pendingItems: 144,
+    activeBatches: 1,
+    admittedItems: 144,
+    completedItems: 0,
+    publishedItems: 0,
+    admissionReturnsPromise: false,
+  });
+  expect(result.workAdmission.settled).toMatchObject({
+    activeEpoch: "0",
+    pendingItems: 0,
+    activeBatches: 0,
+    admittedItems: 144,
+    completedItems: 144,
+    publishedItems: 106,
+    unresolvedItems: 38,
+    staleItems: 0,
+    conflictItems: 0,
+    failedItems: 0,
+    budgetRejectedItems: 0,
+    admissionReturnsPromise: false,
+  });
+  expect(result.workAdmission.acceptedStore).toHaveLength(106);
+  expect(result.workAdmission.acceptedStore.every((sample) => sample.acceptedEpoch === "0")).toBe(true);
   expect(result.acceptedStore).toHaveLength(3);
   expect(result.acceptedStore.map((sample) => sample.key)).toEqual([
     "mandelbrot:1:-17p-3:0p0:1",
@@ -149,6 +207,25 @@ test("WASM oracle and direct WebGPU corpus pass conservatively", async ({ page, 
     && sample.qualityTier === "exact-oracle-agreement"
     && sample.errorSummary.contract === "exact-oracle-iteration-agreement"
     && sample.acceptedEpoch === "0")).toBe(true);
+});
+
+test("numerical diagnostics do not gate exact-camera input", async ({ page }) => {
+  await page.goto("./");
+  await waitForIsolation(page);
+  await expect(page.locator("#preview")).toHaveAttribute("data-state", "ready");
+  await page.locator("details.diagnostics").evaluate((details: HTMLDetailsElement) => { details.open = true; });
+  const before = await readCamera(page);
+  await page.getByRole("button", { name: "Run deterministic corpus" }).click();
+  await expect(page.locator("#results")).toHaveAttribute("data-state", "running");
+  const bounds = await page.locator("#mandelbrot").boundingBox();
+  if (!bounds) throw new Error("Mandelbrot canvas has no layout bounds.");
+  await page.mouse.move(bounds.x + bounds.width * 0.61, bounds.y + bounds.height * 0.41);
+  await page.mouse.wheel(0, -100);
+  await expect.poll(async () => (await readCamera(page)).epoch > before.epoch).toBe(true);
+  await expect(page.locator("#results")).toHaveAttribute("data-state", /passed|failed|error/, { timeout: 120_000 });
+  const result = JSON.parse(await page.locator("#results").innerText()) as HarnessResult;
+  expect(result.status).toBe("passed");
+  expect(result.workAdmission.settled.admissionReturnsPromise).toBe(false);
 });
 
 test("exact camera preserves pointer focus and wheel round trips", async ({ page }) => {

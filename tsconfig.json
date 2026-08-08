@@ -3,6 +3,7 @@
   "references": [
     { "path": "packages/exact-camera" },
     { "path": "packages/view-planner" },
+    { "path": "packages/numerical-work" },
     { "path": "packages/numerical-contract" },
     { "path": "packages/gpu-engine" },
     { "path": "apps/web" }

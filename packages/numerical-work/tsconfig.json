@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "composite": true, "outDir": "dist", "rootDir": "src" },
+  "references": [
+    { "path": "../exact-camera" },
+    { "path": "../numerical-contract" },
+    { "path": "../view-planner" }
+  ],
+  "include": ["src/**/*.ts"]
+}
