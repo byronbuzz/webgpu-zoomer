@@ -1,4 +1,4 @@
-import { createDirectHarness, type DirectSample } from "@webgpu-zoomer/gpu-engine";
+import { createDirectHarness, createMandelbrotPreview, type DirectSample } from "@webgpu-zoomer/gpu-engine";
 import { compareGpuCandidate, type OracleResult } from "@webgpu-zoomer/numerical-contract";
 import "./style.css";
 
@@ -32,6 +32,9 @@ type AdapterEvidence = Readonly<{
 const capabilityNode = document.querySelector<HTMLElement>("#capabilities")!;
 const resultNode = document.querySelector<HTMLElement>("#results")!;
 const runButton = document.querySelector<HTMLButtonElement>("#run")!;
+const previewNode = document.querySelector<HTMLElement>("#preview")!;
+const previewStatusNode = document.querySelector<HTMLElement>("#preview-status")!;
+const canvas = document.querySelector<HTMLCanvasElement>("#mandelbrot")!;
 
 const capabilities = {
   crossOriginIsolated,
@@ -40,6 +43,19 @@ const capabilities = {
   userAgent: navigator.userAgent,
 };
 capabilityNode.textContent = JSON.stringify(capabilities, null, 2);
+
+let gpuSession: Promise<{ adapter: GPUAdapter; device: GPUDevice; environment: AdapterEvidence }> | undefined;
+
+function getGpuSession(): Promise<{ adapter: GPUAdapter; device: GPUDevice; environment: AdapterEvidence }> {
+  gpuSession ??= (async () => {
+    if (!("gpu" in navigator)) throw new Error("WebGPU is unavailable.");
+    const adapter = await navigator.gpu.requestAdapter();
+    if (!adapter) throw new Error("WebGPU adapter request returned null.");
+    const device = await adapter.requestDevice();
+    return { adapter, device, environment: adapterEvidence(adapter) };
+  })();
+  return gpuSession;
+}
 
 function recordLimits(limits: GPUSupportedLimits): Record<string, number> {
   const output: Record<string, number> = {};
@@ -63,6 +79,32 @@ function adapterEvidence(adapter: GPUAdapter): AdapterEvidence {
     limits: recordLimits(adapter.limits),
   };
 }
+
+async function initializePreview(): Promise<void> {
+  try {
+    const { device, environment } = await getGpuSession();
+    const preview = await createMandelbrotPreview(device, canvas);
+    const renderAtDisplaySize = () => {
+      const density = Math.min(window.devicePixelRatio, 2);
+      const width = Math.max(1, Math.round(canvas.clientWidth * density));
+      const height = Math.max(1, Math.round(canvas.clientHeight * density));
+      if (canvas.width !== width || canvas.height !== height) {
+        canvas.width = width;
+        canvas.height = height;
+      }
+      preview.render();
+    };
+    new ResizeObserver(renderAtDisplaySize).observe(canvas);
+    renderAtDisplaySize();
+    previewStatusNode.textContent = `${environment.info.vendor || "WebGPU"} ${environment.info.architecture}`.trim();
+    previewNode.dataset.state = "ready";
+  } catch (error) {
+    previewStatusNode.textContent = error instanceof Error ? error.message : String(error);
+    previewNode.dataset.state = "error";
+  }
+}
+
+void initializePreview();
 
 let messageId = 0;
 function evaluateInWorker(worker: Worker, request: unknown): Promise<OracleResult> {
@@ -100,10 +142,7 @@ runButton.addEventListener("click", async () => {
         bailoutSquared: fixture.bailoutSquared,
       })));
 
-      const adapter = await navigator.gpu.requestAdapter();
-      if (!adapter) throw new Error("WebGPU adapter request returned null.");
-      const device = await adapter.requestDevice();
-      const environment = adapterEvidence(adapter);
+      const { device, environment } = await getGpuSession();
       const directIndexes = corpus.cases.flatMap((fixture, index) => fixture.gpuDirect ? [index] : []);
       const directSamples: DirectSample[] = directIndexes.map((index) => {
         const fixture = corpus.cases[index]!;

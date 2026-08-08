@@ -79,6 +79,11 @@ All decisions below were accepted on 2026-08-08 unless stated otherwise.
 **Constraint:** runtime `crossOriginIsolated`, shared-memory, WebGPU, and numerical gates remain authoritative. Failure stays unsupported or unresolved; the service worker's presence is not acceptance evidence.  
 **Consequence:** this provides a public test surface without silently weakening D-011 or selecting the final production host.
 
+## D-020 — First visible slice is non-authoritative
+**Decision:** the first post-Phase-0 visual slice is a fixed shallow direct WebGPU Mandelbrot canvas with downstream colouring. It is presentation-only and cannot write accepted numerical state.  
+**Rationale:** this exercises the stable canvas/render/shading path immediately after the numerical-spine review without pretending that exact-camera interaction, deep precision, or production convergence exists.  
+**Consequence:** the next slice must bind interaction to the exact dyadic camera and its tests; this preview cannot be reused as a numerical reference or acceptance shortcut.
+
 ## RD-001 — Provisional Phase-0 oracle foundation
 **Status:** assumed; Windows Rust/WASM and one physical AMD stable-Chromium run pass, while clean-commit evidence preservation and NVIDIA comparison remain pending.  
 **Decision:** use a pure-Rust exact-dyadic recurrence backed by `num-bigint` for the independent deterministic oracle. Treat the direct WebGPU kernel as a candidate generator that cannot publish authority without oracle agreement.  

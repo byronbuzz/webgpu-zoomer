@@ -1,6 +1,37 @@
-:root { color-scheme: dark; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; background: #111417; color: #edf1f4; }
-body { margin: 0; }
-main { max-width: 960px; margin: 0 auto; padding: 2rem; }
-section, pre { background: #1a2025; border: 1px solid #39434b; border-radius: 8px; padding: 1rem; }
-button { margin: 1rem 0; padding: .7rem 1rem; background: #ff9f5b; color: #1a120c; border: 0; border-radius: 6px; font-weight: 700; }
+:root {
+  color-scheme: dark;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #05070c;
+  color: #f2f5fb;
+  font-synthesis: none;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; background: radial-gradient(circle at 50% -20%, #16203a 0, #080b13 42rem, #05070c 70rem); }
+.app-shell { width: min(1380px, 100%); margin: 0 auto; padding: clamp(1rem, 3vw, 2.5rem); }
+header { display: flex; align-items: end; justify-content: space-between; gap: 1rem; margin-bottom: 1.25rem; }
+h1 { margin: .1rem 0 0; font-size: clamp(1.7rem, 4vw, 3.25rem); font-weight: 580; letter-spacing: -.045em; }
+.eyebrow { margin: 0; color: #8fa5d5; font-size: .72rem; font-weight: 750; letter-spacing: .18em; text-transform: uppercase; }
+.phase-badge { border: 1px solid #34486f; border-radius: 999px; padding: .48rem .75rem; color: #b9c8e8; background: #111a2a99; font-size: .76rem; }
+
+.viewport { position: relative; overflow: hidden; min-height: 420px; height: min(72vh, 820px); padding: 0; border: 1px solid #293652; border-radius: 18px; background: #02040a; box-shadow: 0 28px 90px #0009, inset 0 0 0 1px #ffffff08; }
+canvas { display: block; width: 100%; height: 100%; }
+.viewport-status { position: absolute; left: 1rem; bottom: 1rem; display: grid; gap: .16rem; padding: .72rem .88rem; border: 1px solid #ffffff1a; border-radius: 10px; background: #050914c9; backdrop-filter: blur(14px); font-size: .72rem; color: #aebbd4; }
+.viewport-status strong { color: #f4f7fd; font-size: .8rem; font-weight: 620; }
+.viewport[data-state="error"] .viewport-status { border-color: #9f4558; }
+
+.context-row { display: flex; justify-content: space-between; gap: 2rem; padding: .9rem .15rem 1.6rem; color: #8d99b2; font-size: .78rem; }
+.context-row p { margin: 0; max-width: 62ch; }
+.context-row span { white-space: nowrap; color: #6f7d99; }
+.diagnostics { border-top: 1px solid #1d2639; padding-top: 1rem; }
+.diagnostics summary { cursor: pointer; color: #9caac2; font-size: .82rem; }
+#capabilities, pre { margin-top: 1rem; padding: 1rem; border: 1px solid #28334a; border-radius: 10px; background: #0d121e; font: .74rem/1.55 ui-monospace, SFMono-Regular, Consolas, monospace; }
+button { margin: 1rem 0 0; padding: .72rem 1rem; border: 0; border-radius: 8px; background: #88a8ff; color: #071022; font-weight: 750; cursor: pointer; }
+button:disabled { opacity: .55; cursor: progress; }
 pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+@media (max-width: 680px) {
+  .viewport { min-height: 360px; height: 62vh; border-radius: 12px; }
+  .context-row { display: grid; gap: .5rem; }
+  .context-row span { white-space: normal; }
+}

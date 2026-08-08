@@ -3,15 +3,37 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>WebGPU Zoomer — Phase 0 Harness</title>
+    <title>WebGPU Zoomer</title>
   </head>
   <body>
-    <main>
-      <h1>Numerical authority harness</h1>
-      <p>This is an experimental oracle/WebGPU differential runner, not the explorer UI.</p>
-      <section id="capabilities" aria-label="capabilities"></section>
-      <button id="run" type="button">Run deterministic corpus</button>
-      <pre id="results" aria-live="polite">Not run.</pre>
+    <main class="app-shell">
+      <header>
+        <div>
+          <p class="eyebrow">WebGPU Zoomer</p>
+          <h1>Mandelbrot explorer</h1>
+        </div>
+        <span class="phase-badge">Early preview</span>
+      </header>
+
+      <section id="preview" class="viewport" aria-label="Mandelbrot preview" data-state="loading">
+        <canvas id="mandelbrot" aria-label="A WebGPU rendering of the Mandelbrot set"></canvas>
+        <div class="viewport-status">
+          <strong id="preview-status">Starting WebGPU…</strong>
+          <span>Shallow direct preview · presentation only</span>
+        </div>
+      </section>
+
+      <div class="context-row">
+        <p>This first visible slice is deliberately simple. Exact navigation and authoritative deep convergence come next.</p>
+        <span>Center −0.5 + 0i · 320 iterations</span>
+      </div>
+
+      <details class="diagnostics">
+        <summary>Numerical validation diagnostics</summary>
+        <section id="capabilities" aria-label="capabilities"></section>
+        <button id="run" type="button">Run deterministic corpus</button>
+        <pre id="results" aria-live="polite">Not run.</pre>
+      </details>
     </main>
     <script>
       (() => {
