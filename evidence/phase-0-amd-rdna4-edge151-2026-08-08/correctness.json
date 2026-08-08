@@ -1,0 +1,283 @@
+{
+    "schemaVersion":  1,
+    "status":  "passed",
+    "semanticConflicts":  0,
+    "oracleMismatches":  0,
+    "gpuMismatches":  0,
+    "intentionalInsufficientBoundPassed":  true,
+    "fallbackAdapter":  false,
+    "oracleChecks":  [
+                         {
+                             "id":  "shallow-origin-analytic",
+                             "expected":  {
+                                              "status":  "certified_interior",
+                                              "reason":  "analytic_interior",
+                                              "iterations":  0
+                                          },
+                             "actual":  {
+                                            "schemaVersion":  1,
+                                            "oracleVersion":  "exact-dyadic-v1",
+                                            "status":  "certified_interior",
+                                            "reason":  "analytic_interior",
+                                            "iterations":  0,
+                                            "workingPrecisionBits":  64
+                                        },
+                             "matches":  true
+                         },
+                         {
+                             "id":  "shallow-exterior-one",
+                             "expected":  {
+                                              "status":  "escaped",
+                                              "reason":  "escape_proved",
+                                              "iterations":  3
+                                          },
+                             "actual":  {
+                                            "schemaVersion":  1,
+                                            "oracleVersion":  "exact-dyadic-v1",
+                                            "status":  "escaped",
+                                            "reason":  "escape_proved",
+                                            "iterations":  3,
+                                            "workingPrecisionBits":  64
+                                        },
+                             "matches":  true
+                         },
+                         {
+                             "id":  "strict-bailout-equality-then-escape",
+                             "expected":  {
+                                              "status":  "escaped",
+                                              "reason":  "escape_proved",
+                                              "iterations":  2
+                                          },
+                             "actual":  {
+                                            "schemaVersion":  1,
+                                            "oracleVersion":  "exact-dyadic-v1",
+                                            "status":  "escaped",
+                                            "reason":  "escape_proved",
+                                            "iterations":  2,
+                                            "workingPrecisionBits":  64
+                                        },
+                             "matches":  true
+                         },
+                         {
+                             "id":  "negative-world-coordinate",
+                             "expected":  {
+                                              "status":  "escaped",
+                                              "reason":  "escape_proved",
+                                              "iterations":  1
+                                          },
+                             "actual":  {
+                                            "schemaVersion":  1,
+                                            "oracleVersion":  "exact-dyadic-v1",
+                                            "status":  "escaped",
+                                            "reason":  "escape_proved",
+                                            "iterations":  1,
+                                            "workingPrecisionBits":  64
+                                        },
+                             "matches":  true
+                         },
+                         {
+                             "id":  "cap-exhausted-minus-two",
+                             "expected":  {
+                                              "status":  "unresolved",
+                                              "reason":  "iteration_budget_exhausted",
+                                              "iterations":  128
+                                          },
+                             "actual":  {
+                                            "schemaVersion":  1,
+                                            "oracleVersion":  "exact-dyadic-v1",
+                                            "status":  "unresolved",
+                                            "reason":  "iteration_budget_exhausted",
+                                            "iterations":  128,
+                                            "workingPrecisionBits":  64
+                                        },
+                             "matches":  true
+                         },
+                         {
+                             "id":  "legacy-overlap-boundary-insufficient",
+                             "expected":  {
+                                              "status":  "unresolved",
+                                              "reason":  "insufficient_precision",
+                                              "iterations":  0
+                                          },
+                             "actual":  {
+                                            "schemaVersion":  1,
+                                            "oracleVersion":  "exact-dyadic-v1",
+                                            "status":  "unresolved",
+                                            "reason":  "insufficient_precision",
+                                            "iterations":  0,
+                                            "workingPrecisionBits":  128
+                                        },
+                             "matches":  true
+                         },
+                         {
+                             "id":  "legacy-deep-repair-storm-insufficient",
+                             "expected":  {
+                                              "status":  "unresolved",
+                                              "reason":  "insufficient_precision",
+                                              "iterations":  0
+                                          },
+                             "actual":  {
+                                            "schemaVersion":  1,
+                                            "oracleVersion":  "exact-dyadic-v1",
+                                            "status":  "unresolved",
+                                            "reason":  "insufficient_precision",
+                                            "iterations":  0,
+                                            "workingPrecisionBits":  128
+                                        },
+                             "matches":  true
+                         },
+                         {
+                             "id":  "legacy-user-failure-insufficient",
+                             "expected":  {
+                                              "status":  "unresolved",
+                                              "reason":  "insufficient_precision",
+                                              "iterations":  0
+                                          },
+                             "actual":  {
+                                            "schemaVersion":  1,
+                                            "oracleVersion":  "exact-dyadic-v1",
+                                            "status":  "unresolved",
+                                            "reason":  "insufficient_precision",
+                                            "iterations":  0,
+                                            "workingPrecisionBits":  96
+                                        },
+                             "matches":  true
+                         },
+                         {
+                             "id":  "extreme-exponent-analytic",
+                             "expected":  {
+                                              "status":  "certified_interior",
+                                              "reason":  "analytic_interior",
+                                              "iterations":  0
+                                          },
+                             "actual":  {
+                                            "schemaVersion":  1,
+                                            "oracleVersion":  "exact-dyadic-v1",
+                                            "status":  "certified_interior",
+                                            "reason":  "analytic_interior",
+                                            "iterations":  0,
+                                            "workingPrecisionBits":  20000
+                                        },
+                             "matches":  true
+                         },
+                         {
+                             "id":  "intentional-insufficient-bound",
+                             "expected":  {
+                                              "status":  "unresolved",
+                                              "reason":  "insufficient_precision",
+                                              "iterations":  0
+                                          },
+                             "actual":  {
+                                            "schemaVersion":  1,
+                                            "oracleVersion":  "exact-dyadic-v1",
+                                            "status":  "unresolved",
+                                            "reason":  "insufficient_precision",
+                                            "iterations":  0,
+                                            "workingPrecisionBits":  512
+                                        },
+                             "matches":  true
+                         }
+                     ],
+    "differentialChecks":  [
+                               {
+                                   "id":  "shallow-exterior-one",
+                                   "gpu":  {
+                                               "candidate":  {
+                                                                 "status":  "escaped",
+                                                                 "iterations":  3,
+                                                                 "reason":  "gpu_candidate_only"
+                                                             },
+                                               "radiusSquared":  25
+                                           },
+                                   "oracle":  {
+                                                  "schemaVersion":  1,
+                                                  "oracleVersion":  "exact-dyadic-v1",
+                                                  "status":  "escaped",
+                                                  "reason":  "escape_proved",
+                                                  "iterations":  3,
+                                                  "workingPrecisionBits":  64
+                                              },
+                                   "comparison":  {
+                                                      "accepted":  true,
+                                                      "publishedStatus":  "escaped",
+                                                      "reason":  "escape_proved"
+                                                  },
+                                   "matches":  true
+                               },
+                               {
+                                   "id":  "strict-bailout-equality-then-escape",
+                                   "gpu":  {
+                                               "candidate":  {
+                                                                 "status":  "escaped",
+                                                                 "iterations":  2,
+                                                                 "reason":  "gpu_candidate_only"
+                                                             },
+                                               "radiusSquared":  36
+                                           },
+                                   "oracle":  {
+                                                  "schemaVersion":  1,
+                                                  "oracleVersion":  "exact-dyadic-v1",
+                                                  "status":  "escaped",
+                                                  "reason":  "escape_proved",
+                                                  "iterations":  2,
+                                                  "workingPrecisionBits":  64
+                                              },
+                                   "comparison":  {
+                                                      "accepted":  true,
+                                                      "publishedStatus":  "escaped",
+                                                      "reason":  "escape_proved"
+                                                  },
+                                   "matches":  true
+                               },
+                               {
+                                   "id":  "negative-world-coordinate",
+                                   "gpu":  {
+                                               "candidate":  {
+                                                                 "status":  "escaped",
+                                                                 "iterations":  1,
+                                                                 "reason":  "gpu_candidate_only"
+                                                             },
+                                               "radiusSquared":  4.515625
+                                           },
+                                   "oracle":  {
+                                                  "schemaVersion":  1,
+                                                  "oracleVersion":  "exact-dyadic-v1",
+                                                  "status":  "escaped",
+                                                  "reason":  "escape_proved",
+                                                  "iterations":  1,
+                                                  "workingPrecisionBits":  64
+                                              },
+                                   "comparison":  {
+                                                      "accepted":  true,
+                                                      "publishedStatus":  "escaped",
+                                                      "reason":  "escape_proved"
+                                                  },
+                                   "matches":  true
+                               },
+                               {
+                                   "id":  "cap-exhausted-minus-two",
+                                   "gpu":  {
+                                               "candidate":  {
+                                                                 "status":  "unresolved",
+                                                                 "iterations":  128,
+                                                                 "reason":  "gpu_candidate_only"
+                                                             },
+                                               "radiusSquared":  0
+                                           },
+                                   "oracle":  {
+                                                  "schemaVersion":  1,
+                                                  "oracleVersion":  "exact-dyadic-v1",
+                                                  "status":  "unresolved",
+                                                  "reason":  "iteration_budget_exhausted",
+                                                  "iterations":  128,
+                                                  "workingPrecisionBits":  64
+                                              },
+                                   "comparison":  {
+                                                      "accepted":  false,
+                                                      "publishedStatus":  "unresolved",
+                                                      "reason":  "gpu_candidate_only"
+                                                  },
+                                   "matches":  true
+                               }
+                           ]
+}

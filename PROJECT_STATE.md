@@ -1,7 +1,7 @@
 # Project State
 
 **State date:** 2026-08-08  
-**Project phase:** `FIRST_TASK.md` implementation is executing on physical Windows hardware. Deterministic Node/TypeScript and Rust gates, the pinned WASM build, the exact-dyadic benchmark, and the headed stable-Chromium WebGPU corpus pass on the primary AMD RDNA-4 machine using Edge 151. Branded Chrome, NVIDIA cross-hardware comparison, and final clean-commit evidence preservation remain open.
+**Project phase:** `FIRST_TASK.md` implementation is executing on physical Windows hardware. Deterministic Node/TypeScript and Rust gates, the pinned WASM build, the exact-dyadic benchmark, and the headed stable-Chromium WebGPU corpus pass on the primary AMD RDNA-4 machine using Edge 151. Clean-commit evidence is preserved under `evidence/phase-0-amd-rdna4-edge151-2026-08-08/`; branded Chrome and NVIDIA cross-hardware comparison remain open.
 
 ## Settled
 
@@ -24,6 +24,7 @@
 - S-017 — Stable production API path plus capability-gated experimental acceleration.
 - S-018 — Legacy repositories are evidence/salvage sources, not the successor repository architecture.
 - S-019 — The clean successor repository is the public GitHub repository `byronbuzz/webgpu-zoomer`; the legacy `byronbuzz/mandelbrot-zoomer` repository remains separate.
+- S-020 — The primary physical-validation machine is an Intel Core Ultra 9 285K system with 64 GB RAM and an AMD Radeon RX 9070 XT. Windows reports driver `32.0.31019.2002`; the headed browser gate independently confirms a non-fallback AMD `rdna-4` WebGPU adapter.
 
 ## Assumed
 
@@ -36,7 +37,6 @@
 - A-007 — Performance thresholds will be expressed in frame budgets and normalized workload metrics, then calibrated on two physical reference systems before release.
 - A-008 — Phase-0 numerical authority uses a pure-Rust exact-dyadic recurrence built on `num-bigint`; this is provisionally chosen as the deterministic oracle, not yet as the production high-throughput reference generator.
 - A-009 — The direct WebGPU Phase-0 kernel produces non-authoritative candidates. Only exact oracle agreement can accept an escaped result in this experimental harness.
-- A-010 — The primary AMD physical-validation machine is an Intel Core Ultra 9 285K system with 64 GB RAM and a user-reported Radeon RX 9070 XT. The headed browser gate confirms a non-fallback AMD `rdna-4` adapter, but Chromium exposes no device/description string, so the exact SKU is not independently captured.
 - A-011 — Active dependency installation and development should use a non-synchronised local SSD checkout. On this machine, `npm ci` in the Google Drive-backed checkout entered an unkillable CPU-bound state, while the same lockfile installed 55 packages in 3 seconds in `C:\Users\Admin\Documents\GitHub\webgpu-zoomer`.
 
 ## Open
@@ -48,7 +48,6 @@
 - O-005 — Maximum resident GPU memory budget as a fraction/absolute cap on reference systems.
 - O-006 — Exact conservative error model for GPU recurrence and reference transport.
 - O-007 — Whether certified interior beyond analytic cardioid/bulb tests will include additional proof methods in v1.
-- O-008 — Exact AMD adapter model/driver for the primary physical run. Edge 151 reports vendor `amd`, architecture `rdna-4`, and `isFallbackAdapter: false`, but leaves device and description empty.
 - O-009 — The default branded-Chrome run remains unexecuted because Chrome is absent and its system installer could not elevate from the agent session. Stable Edge 151 passed the same Chromium/WebGPU gate without experimental flags; preserve this distinction in evidence.
 
 These are research/implementation questions, not reasons to change the product contract.
@@ -65,7 +64,7 @@ These are research/implementation questions, not reasons to change the product c
 
 ## Next
 
-- N-001 — Review and commit the Windows orchestration, pinned-format, WASM packaging, dependency-lock, and cross-platform ZIP evidence repairs; rerun the complete gate from the clean commit and preserve its machine-readable AMD evidence bundle.
-- N-002 — Run the default branded-Chrome channel when Chrome can be installed. Do not relabel the passing Edge 151 result as Chrome evidence.
-- N-003 — Run the same frozen browser corpus on a qualifying NVIDIA system and compare semantic results before any `AT-NUM-009` cross-hardware correctness claim.
+- N-001 — Run the default branded-Chrome channel when Chrome can be installed. Do not relabel the passing Edge 151 result as Chrome evidence.
+- N-002 — Run the same frozen browser corpus on a qualifying NVIDIA system and compare semantic results before any `AT-NUM-009` cross-hardware correctness claim.
+- N-003 — Review the preserved AMD bundle and remaining `FIRST_TASK.md` completion criteria, then select the next executable numerical-spine task.
 - N-004 — Do not begin the explorer presenter, perturbation, rebasing, series/BLA, or production scheduling until the remaining `FIRST_TASK.md` completion evidence is preserved and reviewed.

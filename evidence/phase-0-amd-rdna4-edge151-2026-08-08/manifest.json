@@ -1,0 +1,38 @@
+{
+    "schemaVersion":  1,
+    "commit":  "2e810f2c1ea21d8e9b62ff37baa8afa9ca34d189",
+    "dirty":  false,
+    "generatedAt":  "2026-08-08T03:58:10.310Z",
+    "scene":  "phase-0-deterministic-corpus",
+    "browserChannel":  "msedge",
+    "commands":  [
+                     {
+                         "command":  "npm run verify",
+                         "exitCode":  0,
+                         "durationMs":  3473,
+                         "error":  null
+                     },
+                     {
+                         "command":  "cargo run --release -p precision --example benchmark",
+                         "exitCode":  0,
+                         "durationMs":  386,
+                         "error":  null
+                     },
+                     {
+                         "command":  "npm run test:browser",
+                         "exitCode":  0,
+                         "durationMs":  3038,
+                         "error":  null
+                     }
+                 ],
+    "outcomes":  [
+                     "clean-commit physical gate passed",
+                     "10 of 10 Rust/WASM oracle fixtures matched",
+                     "4 of 4 direct WebGPU comparisons matched",
+                     "intentional insufficient precision remained unresolved",
+                     "cap exhaustion remained unresolved",
+                     "non-fallback AMD RDNA-4 adapter exercised",
+                     "branded Chrome not executed",
+                     "NVIDIA cross-hardware comparison pending"
+                 ]
+}

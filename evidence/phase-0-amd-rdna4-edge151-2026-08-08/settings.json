@@ -1,0 +1,16 @@
+{
+    "schemaVersion":  1,
+    "browserChannel":  "msedge",
+    "headless":  false,
+    "experimentalFlags":  [
+
+                          ],
+    "viewport":  {
+                     "width":  1280,
+                     "height":  720,
+                     "deviceScaleFactor":  1
+                 },
+    "fixtureCorpus":  "apps/web/public/fixtures/oracle-corpus-v1.json",
+    "rustToolchain":  "1.89.0",
+    "wasmBindgen":  "0.2.126"
+}

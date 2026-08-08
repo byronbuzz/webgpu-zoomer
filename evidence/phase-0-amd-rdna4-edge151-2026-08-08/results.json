@@ -1,0 +1,45 @@
+{
+    "schemaVersion":  1,
+    "status":  "passed",
+    "physicalGate":  {
+                         "schemaVersion":  1,
+                         "status":  "passed",
+                         "generatedAt":  "2026-08-08T03:58:10.310Z",
+                         "commands":  [
+                                          {
+                                              "command":  "npm run verify",
+                                              "exitCode":  0,
+                                              "durationMs":  3473,
+                                              "error":  null
+                                          },
+                                          {
+                                              "command":  "cargo run --release -p precision --example benchmark",
+                                              "exitCode":  0,
+                                              "durationMs":  386,
+                                              "error":  null
+                                          },
+                                          {
+                                              "command":  "npm run test:browser",
+                                              "exitCode":  0,
+                                              "durationMs":  3038,
+                                              "error":  null
+                                          }
+                                      ],
+                         "browserEvidencePath":  "C:\\Users\\Admin\\Documents\\GitHub\\webgpu-zoomer\\test-results\\phase-0-browser.json",
+                         "limitation":  null
+                     },
+    "benchmark":  {
+                      "candidate":  "pure-rust-exact-dyadic",
+                      "runs":  10000,
+                      "nsPerSample":  1701
+                  },
+    "browserSummary":  {
+                           "fixtureCount":  10,
+                           "oracleMismatchCount":  0,
+                           "gpuDifferentialCount":  4,
+                           "gpuMismatchCount":  0,
+                           "acceptedGpuEscapes":  3,
+                           "intentionalInsufficientBoundPassed":  true,
+                           "fallbackAdapter":  false
+                       }
+}
