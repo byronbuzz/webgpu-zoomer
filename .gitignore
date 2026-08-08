@@ -4,6 +4,8 @@ dist-ts/
 *.tsbuildinfo
 target/
 apps/web/public/wasm/
+apps/web/src/generated/wasm/*
+!apps/web/src/generated/wasm/precision_wasm.d.ts
 test-results/
 playwright-report/
 evidence/**/*.zip

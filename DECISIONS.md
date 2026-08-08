@@ -75,9 +75,11 @@ All decisions below were accepted on 2026-08-08 unless stated otherwise.
 **Rationale:** legacy architecture carries unresolved numerical and scheduling assumptions; selective salvage is safer than inherited coupling.
 
 ## RD-001 — Provisional Phase-0 oracle foundation
-**Status:** assumed pending Rust/WASM execution evidence.  
+**Status:** assumed; Windows Rust/WASM and one physical AMD stable-Chromium run pass, while clean-commit evidence preservation and NVIDIA comparison remain pending.  
 **Decision:** use a pure-Rust exact-dyadic recurrence backed by `num-bigint` for the independent deterministic oracle. Treat the direct WebGPU kernel as a candidate generator that cannot publish authority without oracle agreement.  
 **Alternative not admitted in Phase 0:** Rug/GMP/MPFR, because its C-backed build does not directly satisfy the required stable `wasm32-unknown-unknown` browser path.  
 **Rationale:** exact dyadic recurrence makes escape and analytic-interior decisions independently checkable, preserves cap-as-unresolved semantics, and fails insufficient precision before iteration.  
 **Limit:** exact numerator growth may make this unsuitable as the eventual high-throughput reference-orbit implementation; `O-001` therefore remains open.  
 **Promotion gate:** pinned Rust/WASM build, oracle fixtures, browser worker execution, benchmark evidence, and review of resource behaviour.
+
+**Evidence update (2026-08-08):** On the primary Windows machine, Rust 1.89.0 tests passed 4/4, wasm-bindgen crate/CLI 0.2.126 built successfully, and the pure-Rust exact-dyadic benchmark completed 10,000 samples at 1,665 ns/sample in the final passing run. Headed stable Edge 151 on a non-fallback AMD RDNA-4 adapter passed all 10 oracle fixtures and all 4 direct WebGPU comparisons with zero mismatches; the intentional insufficient-bound case remained `unresolved`. This is not branded-Chrome evidence and does not establish NVIDIA/AMD cross-hardware agreement or production resource behaviour.

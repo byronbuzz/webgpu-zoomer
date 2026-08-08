@@ -1,11 +1,17 @@
-use precision::{evaluate, OracleRequest, WireDyadic};
+use precision::{OracleRequest, WireDyadic, evaluate};
 use std::time::Instant;
 
 fn main() {
     let request = OracleRequest {
         schema_version: 1,
-        c_re: WireDyadic { numerator: "1".into(), exponent: "0".into() },
-        c_im: WireDyadic { numerator: "0".into(), exponent: "0".into() },
+        c_re: WireDyadic {
+            numerator: "1".into(),
+            exponent: "0".into(),
+        },
+        c_im: WireDyadic {
+            numerator: "0".into(),
+            exponent: "0".into(),
+        },
         iteration_cap: 64,
         precision_bits: 256,
         bailout_squared: 4,

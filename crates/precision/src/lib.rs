@@ -13,13 +13,19 @@ struct ExactDyadic {
 impl ExactDyadic {
     fn new(mut numerator: BigInt, mut exponent: BigInt) -> Self {
         if numerator.is_zero() {
-            return Self { numerator, exponent: BigInt::zero() };
+            return Self {
+                numerator,
+                exponent: BigInt::zero(),
+            };
         }
         while (&numerator & BigInt::one()).is_zero() {
             numerator >>= 1usize;
             exponent += 1u8;
         }
-        Self { numerator, exponent }
+        Self {
+            numerator,
+            exponent,
+        }
     }
 
     fn integer(value: impl Into<BigInt>) -> Self {
@@ -31,7 +37,11 @@ impl ExactDyadic {
     }
 
     fn add(&self, other: &Self) -> Result<Self, Reason> {
-        let exponent = if self.exponent < other.exponent { &self.exponent } else { &other.exponent };
+        let exponent = if self.exponent < other.exponent {
+            &self.exponent
+        } else {
+            &other.exponent
+        };
         let left_shift = Self::shift_to_usize(&(&self.exponent - exponent))?;
         let right_shift = Self::shift_to_usize(&(&other.exponent - exponent))?;
         Ok(Self::new(
@@ -49,7 +59,10 @@ impl ExactDyadic {
     }
 
     fn multiply(&self, other: &Self) -> Self {
-        Self::new(&self.numerator * &other.numerator, &self.exponent + &other.exponent)
+        Self::new(
+            &self.numerator * &other.numerator,
+            &self.exponent + &other.exponent,
+        )
     }
 
     fn compare(&self, other: &Self) -> Result<Ordering, Reason> {
@@ -160,7 +173,12 @@ fn analytic_interior(x: &ExactDyadic, y: &ExactDyadic) -> Result<bool, Reason> {
 
 pub fn evaluate(request: &OracleRequest) -> OracleResult {
     if request.schema_version != 1 || request.bailout_squared < 4 || request.precision_bits == 0 {
-        return result(Status::Invalid, Reason::InvalidRequest, 0, request.precision_bits);
+        return result(
+            Status::Invalid,
+            Reason::InvalidRequest,
+            0,
+            request.precision_bits,
+        );
     }
 
     let x = match parse_wire(&request.c_re, request.precision_bits) {
@@ -190,21 +208,53 @@ pub fn evaluate(request: &OracleRequest) -> OracleResult {
     let bailout = ExactDyadic::integer(request.bailout_squared);
 
     for iteration in 1..=request.iteration_cap {
-        let next_r = match zr.multiply(&zr).subtract(&zi.multiply(&zi)).and_then(|value| value.add(&x)) {
+        let next_r = match zr
+            .multiply(&zr)
+            .subtract(&zi.multiply(&zi))
+            .and_then(|value| value.add(&x))
+        {
             Ok(value) => value,
-            Err(reason) => return result(Status::Unresolved, reason, iteration - 1, request.precision_bits),
+            Err(reason) => {
+                return result(
+                    Status::Unresolved,
+                    reason,
+                    iteration - 1,
+                    request.precision_bits,
+                );
+            }
         };
-        let next_i = match zr.multiply(&zi).multiply(&ExactDyadic::integer(2u8)).add(&y) {
+        let next_i = match zr
+            .multiply(&zi)
+            .multiply(&ExactDyadic::integer(2u8))
+            .add(&y)
+        {
             Ok(value) => value,
-            Err(reason) => return result(Status::Unresolved, reason, iteration - 1, request.precision_bits),
+            Err(reason) => {
+                return result(
+                    Status::Unresolved,
+                    reason,
+                    iteration - 1,
+                    request.precision_bits,
+                );
+            }
         };
         zr = next_r;
         zi = next_i;
         let radius = match zr.multiply(&zr).add(&zi.multiply(&zi)) {
             Ok(value) => value,
-            Err(reason) => return result(Status::Unresolved, reason, iteration, request.precision_bits),
+            Err(reason) => {
+                return result(
+                    Status::Unresolved,
+                    reason,
+                    iteration,
+                    request.precision_bits,
+                );
+            }
         };
-        if radius.compare(&bailout).is_ok_and(|ordering| ordering == Ordering::Greater) {
+        if radius
+            .compare(&bailout)
+            .is_ok_and(|ordering| ordering == Ordering::Greater)
+        {
             return result(
                 Status::Escaped,
                 Reason::EscapeProved,
@@ -253,8 +303,14 @@ mod tests {
 
     #[test]
     fn proves_analytic_interiors() {
-        assert_eq!(evaluate(&request(("0", "0"), ("0", "0"), 0, 64)).status, Status::CertifiedInterior);
-        assert_eq!(evaluate(&request(("-1", "0"), ("0", "0"), 64, 64)).status, Status::CertifiedInterior);
+        assert_eq!(
+            evaluate(&request(("0", "0"), ("0", "0"), 0, 64)).status,
+            Status::CertifiedInterior
+        );
+        assert_eq!(
+            evaluate(&request(("-1", "0"), ("0", "0"), 64, 64)).status,
+            Status::CertifiedInterior
+        );
     }
 
     #[test]

@@ -1,10 +1,10 @@
 import { createHash } from "node:crypto";
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createZip } from "../archive-tools.mjs";
 import { validateEvidenceTarget } from "../validate-evidence.mjs";
 
 const jsonFiles = ["manifest.json", "environment.json", "settings.json", "trajectory.json", "results.json", "correctness.json"];
@@ -41,11 +41,10 @@ test("rejects a checksum mismatch", () => {
   assert.throws(() => validateEvidenceTarget(directory), /checksum mismatch/);
 });
 
-test("validates ZIP integrity and contents when zip is available", (context) => {
+test("validates ZIP integrity and contents", () => {
   const { root } = bundle();
-  if (spawnSync("zip", ["-v"], { stdio: "ignore" }).status !== 0) return context.skip("zip unavailable");
   const path = join(root, "bundle.zip");
-  assert.equal(spawnSync("zip", ["-qr", path, "bundle"], { cwd: root }).status, 0);
+  createZip(join(root, "bundle"), path);
   assert.equal(validateEvidenceTarget(path).valid, true);
   writeFileSync(path, "not a zip");
   assert.throws(() => validateEvidenceTarget(path), /ZIP listing failed|ZIP integrity failed/);
