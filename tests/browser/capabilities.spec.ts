@@ -27,6 +27,9 @@ type HarnessResult = Readonly<{
     samplePlanLevel: string;
     scheduledAcceptedCount: number;
     scheduledStoreChecksum: string;
+    presentationSnapshotChecksum: string;
+    presentationAcceptedCount: number;
+    presentationUnresolvedCount: number;
     intentionalInsufficientBoundPassed: boolean;
     fallbackAdapter: boolean;
   };
@@ -53,6 +56,20 @@ type HarnessResult = Readonly<{
     immediatelyAfterAdmission: WorkDiagnostics;
     settled: WorkDiagnostics;
     acceptedStore: Array<{ acceptedEpoch: string }>;
+  };
+  presentationSnapshot: {
+    snapshotId: string;
+    checksum: string;
+    authority: string;
+    sourcePlanId: string;
+    requestEpoch: string;
+    counts: { total: number; accepted: number; unresolved: number };
+    cells: Array<{
+      source: "accepted" | "unresolved";
+      reason?: string;
+      acceptedEpoch?: string;
+      displayValue: { escapeIterations: number } | null;
+    }>;
   };
 }>;
 
@@ -153,6 +170,9 @@ test("WASM oracle and direct WebGPU corpus pass conservatively", async ({ page, 
     samplePlanLevel: "-2",
     scheduledAcceptedCount: 274,
     scheduledStoreChecksum: "fnv1a64:10d82ed1636ffd19",
+    presentationSnapshotChecksum: "fnv1a64:5c836dd98a60753e",
+    presentationAcceptedCount: 274,
+    presentationUnresolvedCount: 38,
     intentionalInsufficientBoundPassed: true,
     fallbackAdapter: false,
   });
@@ -201,6 +221,19 @@ test("WASM oracle and direct WebGPU corpus pass conservatively", async ({ page, 
   });
   expect(result.workAdmission.acceptedStore).toHaveLength(274);
   expect(result.workAdmission.acceptedStore.every((sample) => sample.acceptedEpoch === "0")).toBe(true);
+  expect(result.presentationSnapshot).toMatchObject({
+    snapshotId: "presentation-snapshot:fnv1a64:5c836dd98a60753e",
+    checksum: "fnv1a64:5c836dd98a60753e",
+    authority: "presentation-only",
+    sourcePlanId: result.samplePlan.planId,
+    requestEpoch: "0",
+    counts: { total: 312, accepted: 274, unresolved: 38 },
+  });
+  expect(result.presentationSnapshot.cells).toHaveLength(312);
+  expect(result.presentationSnapshot.cells.filter((cell) => cell.source === "accepted")).toHaveLength(274);
+  expect(result.presentationSnapshot.cells
+    .filter((cell) => cell.source === "unresolved")
+    .every((cell) => cell.reason === "not_published" && cell.displayValue === null)).toBe(true);
   expect(result.acceptedStore).toHaveLength(3);
   expect(result.acceptedStore.map((sample) => sample.key)).toEqual([
     "mandelbrot:1:-17p-3:0p0:1",

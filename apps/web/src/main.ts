@@ -20,15 +20,19 @@ import {
 import { approximateDyadic } from "@webgpu-zoomer/exact-camera/approximate";
 import {
   AcceptedNumericalStore,
+  canonicalSampleKey,
   compareGpuCandidate,
   evaluateShallowDirectPublication,
   type OracleResult,
 } from "@webgpu-zoomer/numerical-contract";
 import {
   AsyncWorkAdmission,
+  workItemsFromPlan,
+  type AdmissionPolicy,
   type NumericalWorkItem,
   type WorkCompletion,
 } from "@webgpu-zoomer/numerical-work";
+import { createPresentationSnapshot } from "@webgpu-zoomer/presentation-snapshot";
 import { planViewportSampleGrid, serializeSamplePlan } from "@webgpu-zoomer/view-planner";
 import "./style.css";
 
@@ -536,12 +540,13 @@ runButton.addEventListener("click", async () => {
       }));
       const intentionalInsufficient = oracleChecks.find((entry) => entry.id === "intentional-insufficient-bound");
       const scheduledStore = new AcceptedNumericalStore();
-      const workAdmission = new AsyncWorkAdmission(scheduledStore, {
+      const scheduledPolicy: AdmissionPolicy = {
         maximumPendingItems: 512,
         iterationBudget: 8,
         methodVersion: "gpu-direct-f32-v1",
         oracleVersion: corpus.oracleVersion,
-      });
+      };
+      const workAdmission = new AsyncWorkAdmission(scheduledStore, scheduledPolicy);
       const admissionStart = performance.now();
       const admission = workAdmission.admit(
         samplePlan,
@@ -552,6 +557,16 @@ runButton.addEventListener("click", async () => {
       await workAdmission.whenIdle();
       const workDiagnostics = workAdmission.diagnostics();
       const acceptedSnapshot = acceptedStore.snapshot();
+      const scheduledAcceptedSnapshot = scheduledStore.snapshot();
+      const scheduledAcceptedKeys = new Set(scheduledAcceptedSnapshot.map((sample) => sample.key));
+      const unresolvedCoverage = workItemsFromPlan(samplePlan, scheduledPolicy)
+        .filter((item) => !scheduledAcceptedKeys.has(canonicalSampleKey(item.identity)))
+        .map((item) => Object.freeze({ key: item.key, reason: "not_published" as const }));
+      const presentationSnapshot = createPresentationSnapshot({
+        plan: samplePlan,
+        acceptedSamples: scheduledAcceptedSnapshot,
+        unresolvedCoverage,
+      });
       const summary = {
         fixtureCount: corpus.cases.length,
         oracleMismatchCount: oracleChecks.filter((entry) => !entry.matches).length,
@@ -564,6 +579,9 @@ runButton.addEventListener("click", async () => {
         samplePlanLevel: samplePlan.level.toString(),
         scheduledAcceptedCount: scheduledStore.size,
         scheduledStoreChecksum: scheduledStore.checksum(),
+        presentationSnapshotChecksum: presentationSnapshot.checksum,
+        presentationAcceptedCount: presentationSnapshot.counts.accepted,
+        presentationUnresolvedCount: presentationSnapshot.counts.unresolved,
         intentionalInsufficientBoundPassed: intentionalInsufficient?.actual.status === "unresolved"
           && intentionalInsufficient.actual.reason === "insufficient_precision",
         fallbackAdapter: environment.info.isFallbackAdapter,
@@ -576,10 +594,18 @@ runButton.addEventListener("click", async () => {
         && workDiagnostics.conflictItems === 0
         && workDiagnostics.failedItems === 0
         && workDiagnostics.budgetRejectedItems === 0;
+      const presentationPassed = presentationSnapshot.sourcePlanId === samplePlan.planId
+        && presentationSnapshot.authority === "presentation-only"
+        && presentationSnapshot.counts.total === samplePlan.samples.length
+        && presentationSnapshot.counts.accepted === scheduledStore.size
+        && presentationSnapshot.counts.unresolved === workDiagnostics.unresolvedItems
+        && presentationSnapshot.counts.accepted + presentationSnapshot.counts.unresolved
+          === presentationSnapshot.counts.total;
       const passed = summary.oracleMismatchCount === 0
         && summary.gpuMismatchCount === 0
         && summary.intentionalInsufficientBoundPassed
         && scheduledPassed
+        && presentationPassed
         && !summary.fallbackAdapter;
       resultNode.textContent = JSON.stringify({
         schemaVersion: 1,
@@ -593,8 +619,9 @@ runButton.addEventListener("click", async () => {
           admissionCallMs,
           immediatelyAfterAdmission: workImmediatelyAfterAdmission,
           settled: workDiagnostics,
-          acceptedStore: scheduledStore.snapshot(),
+          acceptedStore: scheduledAcceptedSnapshot,
         },
+        presentationSnapshot,
         acceptedStore: acceptedSnapshot,
         oracleChecks,
         differentialChecks,

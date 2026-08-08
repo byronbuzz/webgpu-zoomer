@@ -5,6 +5,7 @@
     { "path": "packages/view-planner" },
     { "path": "packages/numerical-work" },
     { "path": "packages/numerical-contract" },
+    { "path": "packages/presentation-snapshot" },
     { "path": "packages/gpu-engine" },
     { "path": "apps/web" }
   ]

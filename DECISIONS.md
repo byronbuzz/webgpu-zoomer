@@ -116,6 +116,12 @@ All decisions below were accepted on 2026-08-08 unless stated otherwise.
 **Browser bound:** the diagnostic path captures the canvas backing dimensions as explicit integer demand-domain inputs, uses at most 512 samples, and feeds the resulting immutable plan to D-025. Canvas pixels and transforms still cannot classify samples or become numerical recurrence/reference inputs.  
 **Limit:** this establishes exact visible-domain coverage, not pixel-per-sample production density, prioritization, adaptive levels, or presentation snapshots.
 
+## D-027 — Presentation snapshots require total one-way coverage
+**Decision:** a presentation snapshot is an immutable, deterministic derivative of one exact sample plan, same-epoch accepted-store snapshots, and an explicit unresolved entry for every planned cell not accepted. Construction rejects stale or foreign accepted samples, foreign or duplicate unresolved cells, accepted/unresolved overlap, and any coverage gap. Cells remain in canonical plan order and retain the exact serialized camera/domain used to derive them.  
+**Authority boundary:** the snapshot type contains presentation display values and explicit source labels only. It cannot construct the private branded `AcceptedSample`, cannot write the accepted numerical store, and is never consumed by camera, planner, recurrence, reference, comparison, or publication code. Its checksum proves deterministic presentation content, not numerical correctness.  
+**Initial browser bound:** the diagnostic path constructs the snapshot only after D-025 becomes idle. Accepted escape iterations are copied downstream for display; all other planned cells are explicitly `unresolved/not_published`. Snapshot counts must exactly match planner and work-admission accounting before the corpus may pass.  
+**Limit:** this is the first current-view snapshot contract. History selection, invalid-transform rejection, monotonic cross-snapshot replacement, GPU atlas packing, shading, and compositing remain later presentation slices.
+
 ## RD-001 — Provisional Phase-0 oracle foundation
 **Status:** assumed; Windows Rust/WASM and one physical AMD stable-Chromium run pass, while clean-commit evidence preservation and NVIDIA comparison remain pending.  
 **Decision:** use a pure-Rust exact-dyadic recurrence backed by `num-bigint` for the independent deterministic oracle. Treat the direct WebGPU kernel as a candidate generator that cannot publish authority without oracle agreement.  
