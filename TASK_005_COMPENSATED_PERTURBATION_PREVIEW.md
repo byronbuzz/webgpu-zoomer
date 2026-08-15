@@ -49,7 +49,7 @@ Improve the visible fidelity of the bounded deep preview at the persistent targe
 - 2026-08-16: `npm run verify` passed fixture validation, TypeScript, 46 Vitest tests, 5 script tests, 7 Rust tests, the pinned Wasm build, and the production build.
 - 2026-08-16: headed stable Edge suite with `WEBGPU_ZOOMER_BROWSER_CHANNEL=msedge` passed 8/8. The persistent deep-target trajectory selected `bounded-f64-reference-compensated-ds-v1` at the bounded 512-iteration tier and preserved exact pointer focus.
 - `git diff --check` and the local dev-server HTTP readback passed. This establishes typed mode selection, shader compilation, bounded resource use, and authority separation; it does not establish a numerical-accuracy claim or quantify subjective visual improvement.
-- This acceptance is local only. No commit, push, deployment, or successor activation occurred.
+- Local acceptance preceded the user-authorized release: commit `444431aaed32bd4227559931bde6c0e1e2869e8c` was pushed to `main`, GitHub Pages workflow `31910009994` passed, and live-origin HTTP readback confirmed the compensated mode and label. No successor activation occurred.
 ## Blocker protocol
 
 If compensated local perturbation does not materially improve the observed artifact, record the visual/test evidence, keep it non-authoritative, and activate the smallest separate reference-orbit or rebasing task required. Do not relabel the current image as accurate.
