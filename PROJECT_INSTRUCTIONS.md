@@ -8,6 +8,17 @@ Use `AUTHORITY_REGISTER.md` to resolve conflicts. Current explicit human decisio
 
 Maintain `PROJECT_STATE.md` under **Settled · Assumed · Open · Superseded · Next**. Never silently promote an assumption to settled.
 
+## Persistent location
+
+`F:\Coding\WebGPU-Zoomer` is the sole persistent repository location for this project.
+
+- Keep persistent Git worktrees under `F:\Coding\WebGPU-Zoomer\.worktrees\` and manage them with `git worktree` commands.
+- Keep local-only persistent artifacts under `F:\Coding\WebGPU-Zoomer\.local\`.
+- Keep dependency installations and validation on the local SSD. Use `npm ci --no-audit --no-fund` for clean Node dependency installation.
+- Use the system temporary directory for disposable validation artifacts and remove them after validation.
+- Do not leave WebGPU-Zoomer repositories, worktrees, dependency trees, archives, caches, or validation copies elsewhere.
+- Run `npm run check:containment` after relocation, worktree cleanup, or local validation cleanup. A reported outside artifact is a failure to reconcile, not a warning to ignore.
+
 ## Work loop
 
 For every material change:

@@ -3,6 +3,8 @@ dist/
 dist-ts/
 *.tsbuildinfo
 target/
+.worktrees/
+.local/
 apps/web/public/wasm/
 apps/web/src/generated/wasm/*
 !apps/web/src/generated/wasm/precision_wasm.d.ts

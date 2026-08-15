@@ -14,6 +14,7 @@
     "build": "npm run build --workspaces --if-present",
     "build:wasm": "node scripts/build-wasm.mjs",
     "check": "npm run typecheck && npm run test",
+    "check:containment": "node scripts/check-containment.mjs",
     "dev": "npm run dev --workspace @webgpu-zoomer/web",
     "doctor": "node scripts/doctor.mjs",
     "evidence:validate": "node scripts/validate-evidence.mjs",
