@@ -2,6 +2,7 @@ import {
   createDirectHarness,
   createMandelbrotPreview,
   createPerturbationPreviewView,
+  perturbationPreviewIterationCap,
   type DirectHarnessResult,
   type DirectSample,
   type MandelbrotPreviewView,
@@ -305,7 +306,7 @@ function presentationView(camera: ExactCamera): MandelbrotPreviewView | null {
         viewportScale: viewportScale.value,
         referenceOffsetX: centerX.value - referenceX.value,
         referenceOffsetY: centerY.value - referenceY.value,
-        iterationCap: 320,
+        iterationCap: perturbationPreviewIterationCap(viewportScale.value),
       });
       if (perturbation) return perturbation;
     }
@@ -531,9 +532,9 @@ async function initializePreview(): Promise<void> {
       currentPresentationView = view;
       preview.render(view);
       if (view.kind === "perturbation") {
-        previewStatusNode.textContent = "Perturbation preview · non-authoritative";
+        previewStatusNode.textContent = "Compensated perturbation preview · non-authoritative";
         previewNode.dataset.state = "perturbation-preview";
-        previewNode.dataset.previewMode = "bounded-f64-reference-perturbation-v1";
+        previewNode.dataset.previewMode = view.previewMode;
       } else if (view.approximate) {
         previewStatusNode.textContent = "Approximate direct preview · exact camera remains authoritative";
         previewNode.dataset.state = "approximate-preview";

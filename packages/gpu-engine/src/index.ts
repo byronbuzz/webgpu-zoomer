@@ -20,6 +20,8 @@ const perturbationOrbitStride = 4;
 const perturbationReferenceMagnitudeLimit = 1e30;
 const perturbationGlitchThreshold = 0.25;
 const maximumPerturbationTransportError = 2 ** -40;
+const shallowPerturbationPreviewIterations = 320;
+const adaptivePerturbationScale = 2 ** -20;
 
 export type DirectMandelbrotPreviewView = Readonly<{
   kind: "direct";
@@ -36,6 +38,7 @@ export type PerturbationMandelbrotPreviewView = Readonly<{
   viewportScale: number;
   iterationCap: number;
   glitchThreshold: number;
+  previewMode: "bounded-f64-reference-compensated-ds-v1";
   transportError: number;
   transportLimit: number;
   referenceOffsetX: number;
@@ -54,6 +57,12 @@ export type PerturbationPreviewRequest = Readonly<{
   iterationCap?: number;
   transportErrorLimit?: number;
 }>;
+
+export function perturbationPreviewIterationCap(viewportScale: number): number {
+  return Number.isFinite(viewportScale) && viewportScale > 0 && viewportScale <= adaptivePerturbationScale
+    ? maximumPerturbationIterations
+    : shallowPerturbationPreviewIterations;
+}
 
 function splitFloat64(value: number): readonly [number, number] | undefined {
   const high = Math.fround(value);
@@ -114,6 +123,7 @@ export function createPerturbationPreviewView(
     viewportScale: request.viewportScale,
     iterationCap,
     glitchThreshold: perturbationGlitchThreshold,
+    previewMode: "bounded-f64-reference-compensated-ds-v1",
     transportError,
     transportLimit,
     referenceOffsetX,
