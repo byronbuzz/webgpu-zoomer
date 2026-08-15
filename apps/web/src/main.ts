@@ -41,7 +41,7 @@ import {
 } from "@webgpu-zoomer/presentation-compositor";
 import { PresentationHistoryStore } from "@webgpu-zoomer/presentation-history";
 import { createPresentationSnapshot, type PresentationSnapshot } from "@webgpu-zoomer/presentation-snapshot";
-import { planViewportSampleGrid, serializeSamplePlan } from "@webgpu-zoomer/view-planner";
+import { SamplePlanBudgetExceeded, planViewportSampleGrid, serializeSamplePlan, type SamplePlan } from "@webgpu-zoomer/view-planner";
 import "./style.css";
 
 type Fixture = {
@@ -86,10 +86,26 @@ const canvas = document.querySelector<HTMLCanvasElement>("#mandelbrot")!;
 const snapshotCanvas = document.querySelector<HTMLCanvasElement>("#snapshot-overlay")!;
 const cameraReadout = document.querySelector<HTMLElement>("#camera-readout")!;
 const resetButton = document.querySelector<HTMLButtonElement>("#reset-view")!;
+const zoomSpeedInput = document.querySelector<HTMLInputElement>("#zoom-speed")!;
+const zoomSpeedReadout = document.querySelector<HTMLOutputElement>("#zoom-speed-readout")!;
+const referenceIterationsInput = document.querySelector<HTMLInputElement>("#reference-iterations")!;
+const referenceIterationsReadout = document.querySelector<HTMLOutputElement>("#reference-iterations-readout")!;
 
 const initialCamera = createCamera(dyadic(-1n, -1n), dyadic(0n, 0n), dyadic(11n, -2n));
 const pointerFocusFractionBits = 20;
-const presentationStepDurationMs = 180;
+const maximumReferenceIterations = 50_000;
+const maximumReferenceBatchItems = 64;
+const maximumReferenceBatchIterations = 100_000;
+const maximumReferenceNumeratorBits = 4_096;
+const maximumReferenceBatchElapsedMs = 1_000;
+const maximumDirectCandidateIterations = 512;
+const zoomTestTarget = Object.freeze({
+  real: "-0.777120613150274923773",
+  imaginary: "+0.126857238786361887169",
+});
+let zoomStepsPerSecond = Number(zoomSpeedInput.value);
+let requestedReferenceIterations = 8;
+let presentationStepDurationMs = Math.round(1_000 / zoomStepsPerSecond);
 const presentationHistory = new PresentationHistoryStore(4);
 let cameraAuthority: ExactCamera = initialCamera;
 let renderPreview = () => {};
@@ -105,6 +121,32 @@ let maximumFocusErrorPx = 0;
 previewNode.dataset.focusQuantizationBits = pointerFocusFractionBits.toString();
 previewNode.dataset.presentationAuthority = "presentation-only";
 previewNode.dataset.snapshotState = "none";
+previewNode.dataset.zoomTestTarget = JSON.stringify(zoomTestTarget);
+
+function iterationForSliderPosition(position: number): number {
+  const normalized = Math.min(1, Math.max(0, position / 1_000));
+  return Math.min(maximumReferenceIterations, Math.max(1,
+    Math.round(8 * (maximumReferenceIterations / 8) ** normalized)));
+}
+
+function sliderPositionForIteration(iterations: number): number {
+  return Math.round(1_000 * Math.log(iterations / 8) / Math.log(maximumReferenceIterations / 8));
+}
+
+function updateExplorationControls(): void {
+  zoomStepsPerSecond = Number(zoomSpeedInput.value);
+  presentationStepDurationMs = Math.round(1_000 / zoomStepsPerSecond);
+  requestedReferenceIterations = iterationForSliderPosition(Number(referenceIterationsInput.value));
+  zoomSpeedReadout.value = `${zoomStepsPerSecond.toFixed(1)} steps/s`;
+  referenceIterationsReadout.value = requestedReferenceIterations.toLocaleString();
+  previewNode.dataset.zoomStepsPerSecond = zoomStepsPerSecond.toFixed(1);
+  previewNode.dataset.referenceIterationLimit = requestedReferenceIterations.toString();
+}
+
+referenceIterationsInput.value = sliderPositionForIteration(requestedReferenceIterations).toString();
+zoomSpeedInput.addEventListener("input", updateExplorationControls);
+referenceIterationsInput.addEventListener("input", updateExplorationControls);
+updateExplorationControls();
 
 const capabilities = {
   crossOriginIsolated,
@@ -385,11 +427,9 @@ function installCameraInteraction(): void {
     frame: number;
   };
   let hold: HoldState | undefined;
-  const stepIntervalMs = presentationStepDurationMs;
-
   const continueHold = (time: number) => {
     if (!hold) return;
-    if (time - hold.lastStep >= stepIntervalMs) {
+    if (time - hold.lastStep >= presentationStepDurationMs) {
       applyExactZoom(hold.focus, hold.direction);
       hold.lastStep = time;
     }
@@ -410,7 +450,7 @@ function installCameraInteraction(): void {
       pointerId: event.pointerId,
       direction,
       focus: exactPointerFocus(event),
-      lastStep: performance.now() - stepIntervalMs,
+      lastStep: performance.now() - presentationStepDurationMs,
       frame: requestAnimationFrame(continueHold),
     };
   });
@@ -524,12 +564,143 @@ function exactF32Coordinate(value: { numerator: string; exponent: string }): num
   return Object.is(f32, approximation.value) ? f32 : undefined;
 }
 
+type BoundedReferenceRequest = Readonly<{
+  schemaVersion: 1;
+  cRe: { numerator: string; exponent: string };
+  cIm: { numerator: string; exponent: string };
+  iterationCap: number;
+  precisionBits: number;
+  bailoutSquared: number;
+}>;
+
+function unresolvedReference(workingPrecisionBits = 64): OracleResult {
+  return {
+    status: "unresolved",
+    reason: "resource_budget_exhausted",
+    iterations: 0,
+    workingPrecisionBits,
+  };
+}
+
+function partitionBoundedReferenceRequests(
+  requests: readonly BoundedReferenceRequest[],
+): readonly (readonly BoundedReferenceRequest[])[] {
+  const batches: BoundedReferenceRequest[][] = [];
+  let batch: BoundedReferenceRequest[] = [];
+  let totalIterations = 0;
+  for (const request of requests) {
+    if (request.iterationCap > maximumReferenceIterations) {
+      batches.push([request]);
+      continue;
+    }
+    if (batch.length === maximumReferenceBatchItems
+      || totalIterations + request.iterationCap > maximumReferenceBatchIterations) {
+      if (batch.length > 0) batches.push(batch);
+      batch = [];
+      totalIterations = 0;
+    }
+    batch.push(request);
+    totalIterations += request.iterationCap;
+  }
+  if (batch.length > 0) batches.push(batch);
+  return batches;
+}
+
+function evaluateBoundedBatchInWorker(
+  worker: Worker,
+  requests: readonly BoundedReferenceRequest[],
+): Promise<readonly OracleResult[] | undefined> {
+  const id = messageId++;
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (result: readonly OracleResult[] | undefined) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      worker.removeEventListener("message", messageListener);
+      worker.removeEventListener("error", errorListener);
+      resolve(result);
+    };
+    const messageListener = (event: MessageEvent<{ id: number; response: unknown }>) => {
+      if (event.data.id !== id) return;
+      finish(Array.isArray(event.data.response) ? event.data.response as OracleResult[] : undefined);
+    };
+    const errorListener = () => finish(undefined);
+    const timeout = setTimeout(() => finish(undefined), maximumReferenceBatchElapsedMs);
+    worker.addEventListener("message", messageListener);
+    worker.addEventListener("error", errorListener, { once: true });
+    try {
+      worker.postMessage({
+        id,
+        kind: "batch",
+        request: {
+          schemaVersion: 1,
+          requests,
+          limits: {
+            maximumItems: maximumReferenceBatchItems,
+            maximumTotalIterations: maximumReferenceBatchIterations,
+            maximumNumeratorBits: maximumReferenceNumeratorBits,
+          },
+        },
+      });
+    } catch {
+      finish(undefined);
+    }
+  });
+}
+
+async function evaluateBoundedReference(
+  requests: readonly BoundedReferenceRequest[],
+): Promise<readonly OracleResult[]> {
+  let worker = new Worker(new URL("./oracle.worker.ts", import.meta.url), { type: "module" });
+  const results: OracleResult[] = [];
+  try {
+    for (const batch of partitionBoundedReferenceRequests(requests)) {
+      const response = await evaluateBoundedBatchInWorker(worker, batch);
+      if (!response || response.length !== batch.length) {
+        worker.terminate();
+        results.push(...batch.map((request) => unresolvedReference(request.precisionBits)));
+        worker = new Worker(new URL("./oracle.worker.ts", import.meta.url), { type: "module" });
+      } else {
+        results.push(...response);
+      }
+    }
+    return results;
+  } finally {
+    worker.terminate();
+  }
+}
+
+function planBoundedReferenceGrid(camera: ExactCamera): SamplePlan {
+  const maximumSamples = Math.max(8, Math.floor(maximumReferenceBatchIterations / requestedReferenceIterations));
+  let lastBudgetError: SamplePlanBudgetExceeded | undefined;
+  for (const samplesPerAxis of [8, 4, 2, 1]) {
+    try {
+      return planViewportSampleGrid(camera, {
+        formulaId: "mandelbrot",
+        formulaVersion: 1,
+        samplingVersion: 1,
+        samplesPerAxis,
+        maximumSamples,
+        viewportWidth: Math.max(1, canvas.width),
+        viewportHeight: Math.max(1, canvas.height),
+      });
+    } catch (error) {
+      if (error instanceof SamplePlanBudgetExceeded) {
+        lastBudgetError = error;
+        continue;
+      }
+      throw error;
+    }
+  }
+  throw lastBudgetError ?? new Error("No bounded reference sample grid is available.");
+}
+
 async function executePlannedShallowBatch(
   items: readonly NumericalWorkItem[],
-  worker: Worker,
   runDirect: (samples: readonly DirectSample[]) => Promise<DirectHarnessResult[]>,
 ): Promise<readonly WorkCompletion[]> {
-  const oraclePromise = Promise.all(items.map((item) => evaluateInWorker(worker, {
+  const oraclePromise = evaluateBoundedReference(items.map((item) => ({
     schemaVersion: 1,
     cRe: item.identity.cRe,
     cIm: item.identity.cIm,
@@ -539,13 +710,16 @@ async function executePlannedShallowBatch(
   })));
   const directIndexes: number[] = [];
   const directSamples: DirectSample[] = [];
-  items.forEach((item, index) => {
-    const cRe = exactF32Coordinate(item.identity.cRe);
-    const cIm = exactF32Coordinate(item.identity.cIm);
-    if (cRe === undefined || cIm === undefined) return;
-    directIndexes.push(index);
-    directSamples.push({ cRe, cIm, iterationCap: item.progress.iterationBudget, bailoutSquared: 4 });
-  });
+  const plannedIterationBudget = items[0]?.progress.iterationBudget;
+  if (plannedIterationBudget !== undefined && plannedIterationBudget <= maximumDirectCandidateIterations) {
+    items.forEach((item, index) => {
+      const cRe = exactF32Coordinate(item.identity.cRe);
+      const cIm = exactF32Coordinate(item.identity.cIm);
+      if (cRe === undefined || cIm === undefined) return;
+      directIndexes.push(index);
+      directSamples.push({ cRe, cIm, iterationCap: item.progress.iterationBudget, bailoutSquared: 4 });
+    });
+  }
   const [oracle, gpuResults] = await Promise.all([oraclePromise, runDirect(directSamples)]);
   const gpuByIndex = new Map(directIndexes.map((itemIndex, offset) => [itemIndex, gpuResults[offset]!]));
   return items.map((item, index) => ({
@@ -556,7 +730,7 @@ async function executePlannedShallowBatch(
     oracleVersion: item.reference.version,
     candidate: gpuByIndex.get(index)?.candidate
       ?? { status: "unresolved", iterations: 0, reason: "gpu_candidate_only" },
-    oracle: oracle[index]!,
+    oracle: oracle[index] ?? unresolvedReference(),
   }));
 }
 
@@ -581,15 +755,7 @@ runButton.addEventListener("click", async () => {
         bailoutSquared: fixture.bailoutSquared,
       })));
 
-      const samplePlan = planViewportSampleGrid(cameraAuthority, {
-        formulaId: "mandelbrot",
-        formulaVersion: 1,
-        samplingVersion: 1,
-        samplesPerAxis: 8,
-        maximumSamples: 512,
-        viewportWidth: Math.max(1, canvas.width),
-        viewportHeight: Math.max(1, canvas.height),
-      });
+      const samplePlan = planBoundedReferenceGrid(cameraAuthority);
 
       const { device, environment } = await getGpuSession();
       const runDirect = await createDirectHarness(device);
@@ -650,7 +816,7 @@ runButton.addEventListener("click", async () => {
       const scheduledStore = new AcceptedNumericalStore();
       const scheduledPolicy: AdmissionPolicy = {
         maximumPendingItems: 512,
-        iterationBudget: 8,
+        iterationBudget: requestedReferenceIterations,
         methodVersion: "gpu-direct-f32-v1",
         oracleVersion: corpus.oracleVersion,
       };
@@ -658,7 +824,7 @@ runButton.addEventListener("click", async () => {
       const admissionStart = performance.now();
       const admission = workAdmission.admit(
         samplePlan,
-        (items) => executePlannedShallowBatch(items, worker, runDirect),
+        (items) => executePlannedShallowBatch(items, runDirect),
       );
       const admissionCallMs = performance.now() - admissionStart;
       const workImmediatelyAfterAdmission = workAdmission.diagnostics();
@@ -691,6 +857,13 @@ runButton.addEventListener("click", async () => {
       const historyChecksum = presentationHistory.checksum();
       const summary = {
         fixtureCount: corpus.cases.length,
+        selectedReferenceIterationLimit: requestedReferenceIterations,
+        referenceBatchLimits: {
+          maximumItems: maximumReferenceBatchItems,
+          maximumTotalIterations: maximumReferenceBatchIterations,
+          maximumNumeratorBits: maximumReferenceNumeratorBits,
+          maximumElapsedMs: maximumReferenceBatchElapsedMs,
+        },
         oracleMismatchCount: oracleChecks.filter((entry) => !entry.matches).length,
         gpuDifferentialCount: differentialChecks.length,
         gpuMismatchCount: differentialChecks.filter((entry) => !entry.matches).length,

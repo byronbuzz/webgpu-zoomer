@@ -16,6 +16,13 @@ type HarnessResult = Readonly<{
   status: "passed" | "failed";
   environment: { info: { isFallbackAdapter: boolean } };
   summary: {
+    selectedReferenceIterationLimit: number;
+    referenceBatchLimits: {
+      maximumItems: number;
+      maximumTotalIterations: number;
+      maximumNumeratorBits: number;
+      maximumElapsedMs: number;
+    };
     fixtureCount: number;
     oracleMismatchCount: number;
     gpuDifferentialCount: number;
@@ -146,6 +153,10 @@ function worldAtFocus(camera: ExactCamera, focusX: ExactDyadic, focusY: ExactDya
   };
 }
 
+function approximateDyadic(value: ExactDyadic): number {
+  return Number(value.numerator) * 2 ** Number(value.exponent);
+}
+
 async function readLastFocus(page: import("playwright/test").Page): Promise<{ x: ExactDyadic; y: ExactDyadic }> {
   const encoded = await page.locator("#preview").getAttribute("data-last-focus");
   if (!encoded) throw new Error("The quantized pointer focus was not recorded.");
@@ -169,6 +180,52 @@ test("isolated stable browser harness reports capabilities", async ({ page }) =>
   expect(capabilities.webGpu).toBe(true);
   await expect(page.locator("#preview")).toHaveAttribute("data-state", "ready");
   await expect(page.locator("#mandelbrot")).toBeVisible();
+});
+
+test("exploration controls expose exact zoom cadence and a logarithmic 50,000-iteration ceiling", async ({ page }) => {
+  await page.goto("./");
+  await waitForIsolation(page);
+  await expect(page.locator("#zoom-speed-readout")).toHaveText(/steps\/s$/);
+  await page.locator("#zoom-speed").fill("12");
+  await expect(page.locator("#zoom-speed-readout")).toHaveText("12.0 steps/s");
+  await page.locator("#reference-iterations").fill("1000");
+  await expect(page.locator("#reference-iterations-readout")).toHaveText("50,000");
+  await expect(page.locator("#preview")).toHaveAttribute("data-reference-iteration-limit", "50000");
+  await expect(page.locator("#preview")).toHaveAttribute("data-zoom-steps-per-second", "12.0");
+});
+
+test("50,000 iteration reference requests remain bounded and unresolved without a direct candidate", async ({ page }) => {
+  await page.goto("./");
+  await waitForIsolation(page);
+  await page.locator("details.diagnostics").evaluate((details: HTMLDetailsElement) => { details.open = true; });
+  await page.locator("#reference-iterations").fill("1000");
+  await page.getByRole("button", { name: "Run deterministic corpus" }).click();
+  await expect(page.locator("#results")).toHaveAttribute("data-state", /passed|failed|error/, { timeout: 120_000 });
+  const result = JSON.parse(await page.locator("#results").innerText()) as HarnessResult & { error?: string };
+  expect(result.error).toBeUndefined();
+  expect(result.status).toBe("passed");
+  expect(result.summary).toMatchObject({
+    selectedReferenceIterationLimit: 50_000,
+    referenceBatchLimits: {
+      maximumItems: 64,
+      maximumTotalIterations: 100_000,
+      maximumNumeratorBits: 4_096,
+      maximumElapsedMs: 1_000,
+    },
+    scheduledAcceptedCount: 0,
+  });
+  expect(result.summary.plannedSampleCount).toBeLessThanOrEqual(8);
+  expect(result.workAdmission.settled).toMatchObject({
+    completedItems: result.summary.plannedSampleCount,
+    publishedItems: 0,
+    unresolvedItems: result.summary.plannedSampleCount,
+    failedItems: 0,
+  });
+  expect(result.presentationSnapshot.counts).toEqual({
+    total: result.summary.plannedSampleCount,
+    accepted: 0,
+    unresolved: result.summary.plannedSampleCount,
+  });
 });
 
 test("WASM oracle and direct WebGPU corpus pass conservatively", async ({ page, browser }, testInfo) => {
@@ -349,9 +406,10 @@ test("bounded history reprojects on a one-step exact-camera change without chang
   await expect(page.locator("#preview")).toHaveAttribute("data-snapshot-state", "composited");
   const before = JSON.parse(await page.locator("#results").innerText()) as HarnessResult;
   const cameraBefore = await readCamera(page);
+  await page.locator("#mandelbrot").scrollIntoViewIfNeeded();
   const bounds = await page.locator("#mandelbrot").boundingBox();
   if (!bounds) throw new Error("Mandelbrot canvas has no layout bounds.");
-  await page.mouse.move(bounds.x + bounds.width * 0.5, bounds.y + bounds.height * 0.5);
+  await page.locator("#mandelbrot").hover({ position: { x: bounds.width * 0.5, y: bounds.height * 0.5 } });
   await page.mouse.wheel(0, -100);
   await expect.poll(async () => (await readCamera(page)).epoch > cameraBefore.epoch).toBe(true);
   await expect(page.locator("#preview")).toHaveAttribute("data-snapshot-state", "history-reprojected");
@@ -383,7 +441,7 @@ test("numerical diagnostics do not gate exact-camera input", async ({ page }) =>
   await expect(page.locator("#results")).toHaveAttribute("data-state", "running");
   const bounds = await page.locator("#mandelbrot").boundingBox();
   if (!bounds) throw new Error("Mandelbrot canvas has no layout bounds.");
-  await page.mouse.move(bounds.x + bounds.width * 0.61, bounds.y + bounds.height * 0.41);
+  await page.locator("#mandelbrot").hover({ position: { x: bounds.width * 0.61, y: bounds.height * 0.41 } });
   await page.mouse.wheel(0, -100);
   await expect.poll(async () => (await readCamera(page)).epoch > before.epoch).toBe(true);
   await expect(page.locator("#results")).toHaveAttribute("data-state", /passed|failed|error/, { timeout: 120_000 });
@@ -402,11 +460,22 @@ test("exact camera preserves pointer focus and wheel round trips", async ({ page
   if (!bounds) throw new Error("Mandelbrot canvas has no layout bounds.");
   const focusBits = Number(await page.locator("#preview").getAttribute("data-focus-quantization-bits"));
   expect(bounds.height / 2 ** (focusBits + 1)).toBeLessThan(0.001);
-  const pointer = {
-    x: bounds.x + bounds.width * 0.72,
-    y: bounds.y + bounds.height * 0.38,
-  };
   const before = await readCamera(page);
+  const target = JSON.parse((await page.locator("#preview").getAttribute("data-zoom-test-target")) ?? "null") as {
+    real: string;
+    imaginary: string;
+  } | null;
+  expect(target).toEqual({ real: "-0.777120613150274923773", imaginary: "+0.126857238786361887169" });
+  const focusX = (Number(target!.real) - approximateDyadic(before.centerX)) / approximateDyadic(before.viewportScale);
+  const focusY = (Number(target!.imaginary) - approximateDyadic(before.centerY)) / approximateDyadic(before.viewportScale);
+  const pointer = {
+    x: bounds.x + bounds.width / 2 + focusX * bounds.height,
+    y: bounds.y + bounds.height / 2 - focusY * bounds.height,
+  };
+  expect(pointer.x).toBeGreaterThan(bounds.x);
+  expect(pointer.x).toBeLessThan(bounds.x + bounds.width);
+  expect(pointer.y).toBeGreaterThan(bounds.y);
+  expect(pointer.y).toBeLessThan(bounds.y + bounds.height);
   await page.mouse.move(pointer.x, pointer.y);
   await page.mouse.wheel(0, -100);
   await expect.poll(async () => (await readCamera(page)).epoch > before.epoch).toBe(true);
@@ -415,6 +484,9 @@ test("exact camera preserves pointer focus and wheel round trips", async ({ page
   const inwardFocus = await readLastFocus(page);
   const invariantFocus = worldAtFocus(before, inwardFocus.x, inwardFocus.y);
   expect(worldAtFocus(inward, inwardFocus.x, inwardFocus.y)).toEqual(invariantFocus);
+  const halfPointerPixelInWorld = approximateDyadic(before.viewportScale) / bounds.height;
+  expect(Math.abs(approximateDyadic(invariantFocus.x) - Number(target!.real))).toBeLessThan(halfPointerPixelInWorld);
+  expect(Math.abs(approximateDyadic(invariantFocus.y) - Number(target!.imaginary))).toBeLessThan(halfPointerPixelInWorld);
   await page.mouse.wheel(0, 100);
   await expect.poll(async () => (await readCamera(page)).epoch > inward.epoch).toBe(true);
 

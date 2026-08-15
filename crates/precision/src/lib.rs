@@ -88,6 +88,26 @@ pub struct OracleRequest {
     pub bailout_squared: u32,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OracleBatchLimits {
+    pub maximum_items: u32,
+    pub maximum_total_iterations: u32,
+    pub maximum_numerator_bits: u32,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OracleBatchRequest {
+    pub schema_version: u32,
+    pub requests: Vec<OracleRequest>,
+    pub limits: OracleBatchLimits,
+}
+
+const MAXIMUM_REFERENCE_ITERATIONS: u32 = 50_000;
+const MAXIMUM_BATCH_ITEMS: u32 = 64;
+const MAXIMUM_BATCH_ITERATIONS: u32 = 100_000;
+const MAXIMUM_NUMERATOR_BITS: u32 = 8_192;
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Status {
@@ -171,7 +191,14 @@ fn analytic_interior(x: &ExactDyadic, y: &ExactDyadic) -> Result<bool, Reason> {
     Ok(left.compare(&right)? != Ordering::Greater)
 }
 
-pub fn evaluate(request: &OracleRequest) -> OracleResult {
+fn exceeds_numerator_limit(value: &ExactDyadic, maximum_numerator_bits: u32) -> bool {
+    value.numerator.bits() > u64::from(maximum_numerator_bits)
+}
+
+fn evaluate_with_numerator_limit(
+    request: &OracleRequest,
+    maximum_numerator_bits: u32,
+) -> OracleResult {
     if request.schema_version != 1 || request.bailout_squared < 4 || request.precision_bits == 0 {
         return result(
             Status::Invalid,
@@ -189,6 +216,16 @@ pub fn evaluate(request: &OracleRequest) -> OracleResult {
         Ok(value) => value,
         Err(reason) => return result(Status::Unresolved, reason, 0, request.precision_bits),
     };
+    if exceeds_numerator_limit(&x, maximum_numerator_bits)
+        || exceeds_numerator_limit(&y, maximum_numerator_bits)
+    {
+        return result(
+            Status::Unresolved,
+            Reason::ResourceBudgetExhausted,
+            0,
+            request.precision_bits,
+        );
+    }
 
     match analytic_interior(&x, &y) {
         Ok(true) => {
@@ -238,6 +275,16 @@ pub fn evaluate(request: &OracleRequest) -> OracleResult {
                 );
             }
         };
+        if exceeds_numerator_limit(&next_r, maximum_numerator_bits)
+            || exceeds_numerator_limit(&next_i, maximum_numerator_bits)
+        {
+            return result(
+                Status::Unresolved,
+                Reason::ResourceBudgetExhausted,
+                iteration - 1,
+                request.precision_bits,
+            );
+        }
         zr = next_r;
         zi = next_i;
         let radius = match zr.multiply(&zr).add(&zi.multiply(&zi)) {
@@ -251,6 +298,14 @@ pub fn evaluate(request: &OracleRequest) -> OracleResult {
                 );
             }
         };
+        if exceeds_numerator_limit(&radius, maximum_numerator_bits) {
+            return result(
+                Status::Unresolved,
+                Reason::ResourceBudgetExhausted,
+                iteration,
+                request.precision_bits,
+            );
+        }
         if radius
             .compare(&bailout)
             .is_ok_and(|ordering| ordering == Ordering::Greater)
@@ -272,11 +327,65 @@ pub fn evaluate(request: &OracleRequest) -> OracleResult {
     )
 }
 
+pub fn evaluate(request: &OracleRequest) -> OracleResult {
+    evaluate_with_numerator_limit(request, u32::MAX)
+}
+
+fn unresolved_batch_result(request: &OracleRequest) -> OracleResult {
+    result(
+        Status::Unresolved,
+        Reason::ResourceBudgetExhausted,
+        0,
+        request.precision_bits,
+    )
+}
+
+pub fn evaluate_batch(request: &OracleBatchRequest) -> Vec<OracleResult> {
+    let limits = &request.limits;
+    let invalid_limits = request.schema_version != 1
+        || limits.maximum_items == 0
+        || limits.maximum_items > MAXIMUM_BATCH_ITEMS
+        || limits.maximum_total_iterations == 0
+        || limits.maximum_total_iterations > MAXIMUM_BATCH_ITERATIONS
+        || limits.maximum_numerator_bits == 0
+        || limits.maximum_numerator_bits > MAXIMUM_NUMERATOR_BITS;
+    let total_iterations = request
+        .requests
+        .iter()
+        .try_fold(0u32, |total, item| total.checked_add(item.iteration_cap));
+    let exceeds_work_budget = request.requests.len() > limits.maximum_items as usize
+        || request
+            .requests
+            .iter()
+            .any(|item| item.iteration_cap > MAXIMUM_REFERENCE_ITERATIONS)
+        || total_iterations.map_or(true, |total| total > limits.maximum_total_iterations);
+    if invalid_limits || exceeds_work_budget {
+        return request
+            .requests
+            .iter()
+            .map(unresolved_batch_result)
+            .collect();
+    }
+    request
+        .requests
+        .iter()
+        .map(|item| evaluate_with_numerator_limit(item, limits.maximum_numerator_bits))
+        .collect()
+}
+
 pub fn evaluate_json(input: &str) -> String {
     match serde_json::from_str::<OracleRequest>(input) {
         Ok(request) => serde_json::to_string(&evaluate(&request)).expect("OracleResult serializes"),
         Err(_) => serde_json::to_string(&result(Status::Invalid, Reason::InvalidRequest, 0, 0))
             .expect("OracleResult serializes"),
+    }
+}
+
+pub fn evaluate_batch_json(input: &str) -> String {
+    match serde_json::from_str::<OracleBatchRequest>(input) {
+        Ok(request) => serde_json::to_string(&evaluate_batch(&request))
+            .expect("Batch oracle results serialize"),
+        Err(_) => "[]".to_owned(),
     }
 }
 
@@ -333,5 +442,63 @@ mod tests {
         assert_eq!(output.status, Status::Unresolved);
         assert_eq!(output.reason, Reason::InsufficientPrecision);
         assert_eq!(output.iterations, 0);
+    }
+
+    fn batch(
+        requests: Vec<OracleRequest>,
+        maximum_total_iterations: u32,
+        maximum_numerator_bits: u32,
+    ) -> OracleBatchRequest {
+        OracleBatchRequest {
+            schema_version: 1,
+            requests,
+            limits: OracleBatchLimits {
+                maximum_items: 64,
+                maximum_total_iterations,
+                maximum_numerator_bits,
+            },
+        }
+    }
+
+    #[test]
+    fn bounded_batch_accepts_a_50k_iteration_ceiling_without_promoting_cap_exhaustion() {
+        let results = evaluate_batch(&batch(
+            vec![request(("1", "0"), ("0", "0"), 50_000, 64)],
+            50_000,
+            64,
+        ));
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].status, Status::Escaped);
+        assert_eq!(results[0].iterations, 3);
+    }
+
+    #[test]
+    fn bounded_batch_rejects_total_requested_work_before_evaluation() {
+        let results = evaluate_batch(&batch(
+            vec![
+                request(("1", "0"), ("0", "0"), 50_000, 64),
+                request(("1", "0"), ("0", "0"), 50_000, 64),
+            ],
+            50_000,
+            64,
+        ));
+        assert!(
+            results
+                .iter()
+                .all(|result| result.status == Status::Unresolved
+                    && result.reason == Reason::ResourceBudgetExhausted
+                    && result.iterations == 0)
+        );
+    }
+
+    #[test]
+    fn bounded_batch_stops_numerator_growth_as_unresolved() {
+        let results = evaluate_batch(&batch(
+            vec![request(("1", "0"), ("0", "0"), 50_000, 64)],
+            50_000,
+            1,
+        ));
+        assert_eq!(results[0].status, Status::Unresolved);
+        assert_eq!(results[0].reason, Reason::ResourceBudgetExhausted);
     }
 }
