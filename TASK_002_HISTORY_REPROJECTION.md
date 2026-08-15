@@ -2,7 +2,7 @@
 
 ## Lifecycle
 
-- **Status:** `active`
+- **Status:** `accepted`
 - **Controlling state:** `PROJECT_STATE.md`
 - **Predecessor:** `FIRST_TASK.md` — accepted
 - **Source state:** `PROJECT_STATE.md` N-004
@@ -65,6 +65,14 @@ Do not assume this list is exhaustive if the live dependency graph proves otherw
 - Focused unit/browser checks for the affected path pass.
 - No acceptance criterion is weakened and no unrelated numerical/presenter architecture is introduced.
 - Completion evidence is recorded and `PROJECT_STATE.md` is reconciled before any successor task is activated.
+
+## Completion evidence
+
+- Commit `4f3ea8c08ba00ac3a9a972f6fbf417ba8de2ca4e`; GitHub Pages workflow `31884724659` deployed successfully on 2026-08-15.
+- Local `npm run verify` passed 43 Vitest tests, 5 script tests, 4 Rust tests, the Wasm build, and the production build.
+- Local headed Edge `npm run test:browser` passed 6/6 with `WEBGPU_ZOOMER_BROWSER_CHANNEL=msedge`.
+- Live-origin headed Edge `npm run test:browser` passed 6/6 with `WEBGPU_ZOOMER_BASE_URL=https://byronbuzz.github.io/webgpu-zoomer/` and `WEBGPU_ZOOMER_BROWSER_CHANNEL=msedge`, including the one-step history reprojection assertion with unchanged numerical checksums.
+- `git diff --check` passed before the implementation commit. The acceptance scope is presentation-only; branded Chrome and NVIDIA evidence remain open.
 
 ## Do not do
 

@@ -55,7 +55,7 @@ This is **not** a specification for revising WebGPU Fractal Zoomer v1.4 or mergi
 
 ## Immediate next action
 
-Read `PROJECT_STATE.md`, open the file named by **Active task**, confirm its status is `active`, then execute that bounded task.
+Read `PROJECT_STATE.md`. If **Active task** names a task file, open it, confirm its status is `active`, then execute that bounded task. If no active task is named, reconcile or define a bounded successor contract before editing product code.
 
 `FIRST_TASK.md` is completed historical context. Do not resume it unless `PROJECT_STATE.md` is explicitly reconciled to say otherwise.
 

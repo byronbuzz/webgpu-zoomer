@@ -17,6 +17,6 @@ Never:
 
 If numerical validity is uncertain, return/escalate `unresolved`.
 
-`PROJECT_STATE.md` is canonical for the current workflow position and active-task identity. Load only the file named by **Active task** and verify its status is `active` before implementation. If the pointer is missing, contradictory, or already satisfied by evidence, reconcile the control plane before editing product code.
+`PROJECT_STATE.md` is canonical for the current workflow position and active-task identity. When **Active task** names a task file, load only that file and verify its status is `active` before implementation. If no active task is named, or the pointer is contradictory or already satisfied by evidence, reconcile the control plane before editing product code.
 
 After accepted work, preserve the task/evidence record and update `PROJECT_STATE.md` before advancing to a successor task.
