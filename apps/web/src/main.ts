@@ -1,6 +1,7 @@
 import {
   createDirectHarness,
   createMandelbrotPreview,
+  createPerturbationPreviewView,
   type DirectHarnessResult,
   type DirectSample,
   type MandelbrotPreviewView,
@@ -108,6 +109,7 @@ let requestedReferenceIterations = 8;
 let presentationStepDurationMs = Math.round(1_000 / zoomStepsPerSecond);
 const presentationHistory = new PresentationHistoryStore(4);
 let cameraAuthority: ExactCamera = initialCamera;
+let latestExactReferenceCoordinate: { x: ExactDyadic; y: ExactDyadic } | undefined;
 let renderPreview = () => {};
 let currentPresentationView: MandelbrotPreviewView | undefined;
 let drawPresentationView = (_view: MandelbrotPreviewView) => {};
@@ -285,18 +287,37 @@ function presentationView(camera: ExactCamera): MandelbrotPreviewView | null {
   const centerX32 = Math.fround(centerX.value);
   const centerY32 = Math.fround(centerY.value);
   const viewportScale32 = Math.fround(viewportScale.value);
+  if (!Number.isFinite(viewportScale32) || viewportScale32 <= 0) return null;
+
   const halfPixelBudget = viewportScale.value / Math.max(2, canvas.height * 2);
   const centerXError = centerX.absoluteError + Math.abs(centerX.value - centerX32);
   const centerYError = centerY.absoluteError + Math.abs(centerY.value - centerY32);
   const scaleError = viewportScale.absoluteError + Math.abs(viewportScale.value - viewportScale32);
-  if (!Number.isFinite(viewportScale32)
-    || viewportScale32 <= 0
-    || centerXError > halfPixelBudget
-    || centerYError > halfPixelBudget
-    || scaleError > halfPixelBudget) {
-    return null;
+  const directApproximate = !Number.isFinite(centerX32) || !Number.isFinite(centerY32)
+    || centerXError > halfPixelBudget || centerYError > halfPixelBudget || scaleError > halfPixelBudget;
+  if (directApproximate) {
+    const referenceX = latestExactReferenceCoordinate ? approximateDyadic(latestExactReferenceCoordinate.x) : centerX;
+    const referenceY = latestExactReferenceCoordinate ? approximateDyadic(latestExactReferenceCoordinate.y) : centerY;
+    if (referenceX && referenceY) {
+      const perturbation = createPerturbationPreviewView({
+        centerX: referenceX.value,
+        centerY: referenceY.value,
+        viewportScale: viewportScale.value,
+        referenceOffsetX: centerX.value - referenceX.value,
+        referenceOffsetY: centerY.value - referenceY.value,
+        iterationCap: 320,
+      });
+      if (perturbation) return perturbation;
+    }
   }
-  return { centerX: centerX32, centerY: centerY32, viewportScale: viewportScale32 };
+  if (!Number.isFinite(centerX32) || !Number.isFinite(centerY32)) return null;
+  return {
+    kind: "direct",
+    centerX: centerX32,
+    centerY: centerY32,
+    viewportScale: viewportScale32,
+    approximate: directApproximate,
+  };
 }
 
 function publishMotionTelemetry(): void {
@@ -317,13 +338,19 @@ function startPresentationTransition(focus: { x: ExactDyadic; y: ExactDyadic }):
   updateCameraReadout();
   if (!target) {
     cancelAnimationFrame(transitionFrame);
-    previewStatusNode.textContent = "Exact camera active · direct preview precision exhausted";
-    previewNode.dataset.state = "precision-limit";
+    previewStatusNode.textContent = "Exact camera active · preview representation unavailable";
+    previewNode.dataset.state = "preview-unavailable";
     previewNode.dataset.presentationState = "unresolved";
     return;
   }
 
   const start = currentPresentationView ?? target;
+  if (start.kind !== "direct" || target.kind !== "direct") {
+    cancelAnimationFrame(transitionFrame);
+    drawPresentationView(target);
+    previewNode.dataset.presentationState = "settled";
+    return;
+  }
   const focusX = approximateDyadic(focus.x);
   const focusY = approximateDyadic(focus.y);
   if (!focusX || !focusY) {
@@ -342,9 +369,11 @@ function startPresentationTransition(focus: { x: ExactDyadic; y: ExactDyadic }):
     const progress = Math.min(1, (time - startedAt) / presentationStepDurationMs);
     const scale = start.viewportScale * scaleRatio ** progress;
     const view = progress === 1 ? target : {
+      kind: "direct" as const,
       centerX: focusWorldX - focusX.value * scale,
       centerY: focusWorldY - focusY.value * scale,
       viewportScale: scale,
+      approximate: start.approximate || target.approximate,
     };
     const displayedCenterX = Math.fround(view.centerX);
     const displayedCenterY = Math.fround(view.centerY);
@@ -406,6 +435,7 @@ function applyExactZoom(focus: { x: ExactDyadic; y: ExactDyadic }, exponentDelta
     y: serializeDyadic(focus.y),
   });
   const invariantFocus = worldAtFocus(cameraAuthority, focus);
+  latestExactReferenceCoordinate = invariantFocus;
   cameraAuthority = zoomAbout(cameraAuthority, focus.x, focus.y, exponentDelta);
   void compositePresentationHistory();
   const nextFocus = worldAtFocus(cameraAuthority, focus);
@@ -467,6 +497,7 @@ function installCameraInteraction(): void {
   resetButton.addEventListener("click", () => {
     cancelAnimationFrame(transitionFrame);
     clearPresentationSnapshot("invalidated");
+    latestExactReferenceCoordinate = undefined;
     cameraAuthority = createCamera(
       initialCamera.centerX,
       initialCamera.centerY,
@@ -497,34 +528,29 @@ async function initializePreview(): Promise<void> {
         snapshotCanvas.width = width;
         snapshotCanvas.height = height;
       }
-      const f32View = {
-        centerX: Math.fround(view.centerX),
-        centerY: Math.fround(view.centerY),
-        viewportScale: Math.fround(view.viewportScale),
-      };
-      const halfPixelBudget = view.viewportScale / Math.max(2, canvas.height * 2);
-      if (!Number.isFinite(f32View.viewportScale)
-        || f32View.viewportScale <= 0
-        || Math.abs(view.centerX - f32View.centerX) > halfPixelBudget
-        || Math.abs(view.centerY - f32View.centerY) > halfPixelBudget
-        || Math.abs(view.viewportScale - f32View.viewportScale) > halfPixelBudget) {
-        previewStatusNode.textContent = "Exact camera active · direct preview precision exhausted";
-        previewNode.dataset.state = "precision-limit";
-        previewNode.dataset.presentationState = "unresolved";
-        return;
-      }
       currentPresentationView = view;
-      preview.render(f32View);
-      previewStatusNode.textContent = adapterLabel;
-      previewNode.dataset.state = "ready";
+      preview.render(view);
+      if (view.kind === "perturbation") {
+        previewStatusNode.textContent = "Perturbation preview · non-authoritative";
+        previewNode.dataset.state = "perturbation-preview";
+        previewNode.dataset.previewMode = "bounded-f64-reference-perturbation-v1";
+      } else if (view.approximate) {
+        previewStatusNode.textContent = "Approximate direct preview · exact camera remains authoritative";
+        previewNode.dataset.state = "approximate-preview";
+        previewNode.dataset.previewMode = "direct-f32-approximate";
+      } else {
+        previewStatusNode.textContent = adapterLabel;
+        previewNode.dataset.state = "ready";
+        previewNode.dataset.previewMode = "direct-f32";
+      }
     };
     renderPreview = () => {
       cancelAnimationFrame(transitionFrame);
       const view = presentationView(cameraAuthority);
       updateCameraReadout();
       if (!view) {
-        previewStatusNode.textContent = "Exact camera active · direct preview precision exhausted";
-        previewNode.dataset.state = "precision-limit";
+        previewStatusNode.textContent = "Exact camera active · preview representation unavailable";
+        previewNode.dataset.state = "preview-unavailable";
         previewNode.dataset.presentationState = "unresolved";
         return;
       }

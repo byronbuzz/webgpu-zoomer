@@ -450,7 +450,7 @@ test("numerical diagnostics do not gate exact-camera input", async ({ page }) =>
   expect(result.workAdmission.settled.admissionReturnsPromise).toBe(false);
 });
 
-test("exact camera preserves pointer focus and wheel round trips", async ({ page }) => {
+test("exact camera preserves pointer focus, round trips, and continues through the former f32 display guard", async ({ page }) => {
   await page.goto("./");
   await waitForIsolation(page);
   await expect(page.locator("#preview")).toHaveAttribute("data-state", "ready");
@@ -466,17 +466,21 @@ test("exact camera preserves pointer focus and wheel round trips", async ({ page
     imaginary: string;
   } | null;
   expect(target).toEqual({ real: "-0.777120613150274923773", imaginary: "+0.126857238786361887169" });
-  const focusX = (Number(target!.real) - approximateDyadic(before.centerX)) / approximateDyadic(before.viewportScale);
-  const focusY = (Number(target!.imaginary) - approximateDyadic(before.centerY)) / approximateDyadic(before.viewportScale);
-  const pointer = {
-    x: bounds.x + bounds.width / 2 + focusX * bounds.height,
-    y: bounds.y + bounds.height / 2 - focusY * bounds.height,
+  const aimRecordedTarget = async () => {
+    const camera = await readCamera(page);
+    const focusX = (Number(target!.real) - approximateDyadic(camera.centerX)) / approximateDyadic(camera.viewportScale);
+    const focusY = (Number(target!.imaginary) - approximateDyadic(camera.centerY)) / approximateDyadic(camera.viewportScale);
+    const pointer = {
+      x: bounds.x + bounds.width / 2 + focusX * bounds.height,
+      y: bounds.y + bounds.height / 2 - focusY * bounds.height,
+    };
+    expect(pointer.x).toBeGreaterThan(bounds.x);
+    expect(pointer.x).toBeLessThan(bounds.x + bounds.width);
+    expect(pointer.y).toBeGreaterThan(bounds.y);
+    expect(pointer.y).toBeLessThan(bounds.y + bounds.height);
+    await page.mouse.move(pointer.x, pointer.y);
   };
-  expect(pointer.x).toBeGreaterThan(bounds.x);
-  expect(pointer.x).toBeLessThan(bounds.x + bounds.width);
-  expect(pointer.y).toBeGreaterThan(bounds.y);
-  expect(pointer.y).toBeLessThan(bounds.y + bounds.height);
-  await page.mouse.move(pointer.x, pointer.y);
+  await aimRecordedTarget();
   await page.mouse.wheel(0, -100);
   await expect.poll(async () => (await readCamera(page)).epoch > before.epoch).toBe(true);
 
@@ -520,16 +524,19 @@ test("exact camera preserves pointer focus and wheel round trips", async ({ page
 
   let previousEpoch = heldZoom.epoch;
   for (let step = 0; step < 40; step += 1) {
+    await aimRecordedTarget();
     await page.mouse.wheel(0, -100);
     await expect.poll(async () => (await readCamera(page)).epoch > previousEpoch).toBe(true);
     previousEpoch = (await readCamera(page)).epoch;
-    if (await page.locator("#preview").getAttribute("data-state") === "precision-limit") break;
+    if (await page.locator("#preview").getAttribute("data-state") === "perturbation-preview") break;
   }
-  await expect(page.locator("#preview")).toHaveAttribute("data-state", "precision-limit");
+  await expect(page.locator("#preview")).toHaveAttribute("data-state", "perturbation-preview");
+  await expect(page.locator("#preview")).toHaveAttribute("data-preview-mode", "bounded-f64-reference-perturbation-v1");
   const limitedCamera = await readCamera(page);
+  await aimRecordedTarget();
   await page.mouse.wheel(0, -100);
   await expect.poll(async () => (await readCamera(page)).epoch > limitedCamera.epoch).toBe(true);
-  await expect(page.locator("#preview")).toHaveAttribute("data-state", "precision-limit");
+  await expect(page.locator("#preview")).toHaveAttribute("data-state", "perturbation-preview");
 
   await page.getByRole("button", { name: "Reset view" }).click();
   const reset = await readCamera(page);

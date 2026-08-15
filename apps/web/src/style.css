@@ -20,6 +20,7 @@ h1 { margin: .1rem 0 0; font-size: clamp(1.7rem, 4vw, 3.25rem); font-weight: 580
 .viewport-status { position: absolute; left: 1rem; bottom: 1rem; display: grid; gap: .16rem; padding: .72rem .88rem; border: 1px solid #ffffff1a; border-radius: 10px; background: #050914c9; backdrop-filter: blur(14px); font-size: .72rem; color: #aebbd4; pointer-events: none; }
 .viewport-status strong { color: #f4f7fd; font-size: .8rem; font-weight: 620; }
 .viewport[data-state="error"] .viewport-status { border-color: #9f4558; }
+.viewport[data-state="approximate-preview"] .viewport-status { border-color: #b7873b; }
 
 .context-row { display: flex; align-items: center; justify-content: space-between; gap: 2rem; padding: .9rem .15rem 1.6rem; color: #8d99b2; font-size: .78rem; }
 .context-row strong { color: #c6d1e7; font-weight: 620; }
