@@ -35,6 +35,7 @@ import {
 } from "@webgpu-zoomer/numerical-work";
 import {
   createSnapshotCompositor,
+  prepareHistoryComposite,
   prepareSnapshotComposite,
   type SnapshotCompositor,
 } from "@webgpu-zoomer/presentation-compositor";
@@ -97,7 +98,7 @@ let drawPresentationView = (_view: MandelbrotPreviewView) => {};
 let transitionFrame = 0;
 let snapshotCompositor: SnapshotCompositor | undefined;
 let snapshotCompositorReady: Promise<SnapshotCompositor> | undefined;
-let activePresentationSnapshot: PresentationSnapshot | undefined;
+let activePresentationComposite = false;
 const motionFrameDurations: number[] = [];
 let motionFrameCount = 0;
 let maximumFocusErrorPx = 0;
@@ -137,10 +138,13 @@ function getSnapshotCompositor(): Promise<SnapshotCompositor> {
 }
 
 function clearPresentationSnapshot(state: "none" | "invalidated" = "none"): void {
-  activePresentationSnapshot = undefined;
+  activePresentationComposite = false;
   snapshotCompositor?.clear();
   previewNode.dataset.snapshotState = state;
   delete previewNode.dataset.snapshotChecksum;
+  delete previewNode.dataset.historyFrameId;
+  delete previewNode.dataset.historyChecksum;
+  delete previewNode.dataset.historyReprojection;
 }
 
 async function compositePresentationSnapshot(snapshot: PresentationSnapshot) {
@@ -151,9 +155,12 @@ async function compositePresentationSnapshot(snapshot: PresentationSnapshot) {
   }
   const compositor = await getSnapshotCompositor();
   compositor.render(prepared);
-  activePresentationSnapshot = snapshot;
+  activePresentationComposite = true;
   previewNode.dataset.snapshotState = "composited";
   previewNode.dataset.snapshotChecksum = snapshot.checksum;
+  delete previewNode.dataset.historyFrameId;
+  delete previewNode.dataset.historyChecksum;
+  delete previewNode.dataset.historyReprojection;
   return Object.freeze({
     status: "composited" as const,
     snapshotId: prepared.snapshotId,
@@ -163,6 +170,45 @@ async function compositePresentationSnapshot(snapshot: PresentationSnapshot) {
     unresolvedCount: prepared.unresolvedCount,
     transformErrorLimitPx: prepared.transformErrorLimitPx,
   });
+}
+
+async function compositePresentationHistory(): Promise<void> {
+  const viewportWidth = canvas.width;
+  const viewportHeight = canvas.height;
+  const selectedCamera = serializeCamera(cameraAuthority);
+  const selection = presentationHistory.select(cameraAuthority, viewportWidth, viewportHeight);
+  if (!selection.selected) {
+    clearPresentationSnapshot("invalidated");
+    previewNode.dataset.historySelection = selection.reason;
+    return;
+  }
+  const prepared = prepareHistoryComposite(
+    selection.frame,
+    selection.reprojection,
+    cameraAuthority,
+    viewportWidth,
+    viewportHeight,
+  );
+  if (!prepared.accepted) {
+    clearPresentationSnapshot("invalidated");
+    previewNode.dataset.historySelection = prepared.reason;
+    return;
+  }
+  const compositor = await getSnapshotCompositor();
+  if (canvas.width !== viewportWidth || canvas.height !== viewportHeight
+    || JSON.stringify(serializeCamera(cameraAuthority)) !== JSON.stringify(selectedCamera)) return;
+  compositor.render(prepared);
+  activePresentationComposite = true;
+  previewNode.dataset.snapshotState = selection.reprojection ? "history-reprojected" : "history-exact";
+  previewNode.dataset.historySelection = "selected";
+  previewNode.dataset.historyFrameId = selection.frame.frameId;
+  previewNode.dataset.historyChecksum = selection.frame.checksum;
+  if (selection.reprojection) {
+    previewNode.dataset.historyReprojection = JSON.stringify(selection.reprojection);
+  } else {
+    delete previewNode.dataset.historyReprojection;
+  }
+  delete previewNode.dataset.snapshotChecksum;
 }
 
 function recordLimits(limits: GPUSupportedLimits): Record<string, number> {
@@ -319,6 +365,7 @@ function applyExactZoom(focus: { x: ExactDyadic; y: ExactDyadic }, exponentDelta
   });
   const invariantFocus = worldAtFocus(cameraAuthority, focus);
   cameraAuthority = zoomAbout(cameraAuthority, focus.x, focus.y, exponentDelta);
+  void compositePresentationHistory();
   const nextFocus = worldAtFocus(cameraAuthority, focus);
   if (invariantFocus.x.numerator !== nextFocus.x.numerator
     || invariantFocus.x.exponent !== nextFocus.x.exponent
@@ -387,6 +434,7 @@ function installCameraInteraction(): void {
       cameraAuthority.epoch + 1n,
     );
     renderPreview();
+    void compositePresentationHistory();
   });
 }
 
@@ -403,7 +451,7 @@ async function initializePreview(): Promise<void> {
       const width = Math.max(1, Math.round(canvas.clientWidth * density));
       const height = Math.max(1, Math.round(canvas.clientHeight * density));
       if (canvas.width !== width || canvas.height !== height) {
-        if (activePresentationSnapshot) clearPresentationSnapshot("invalidated");
+        if (activePresentationComposite) clearPresentationSnapshot("invalidated");
         canvas.width = width;
         canvas.height = height;
         snapshotCanvas.width = width;
@@ -636,7 +684,7 @@ runButton.addEventListener("click", async () => {
         deserializeCamera(presentationSnapshot.camera),
         dyadic(0n, 0n),
         dyadic(0n, 0n),
-        -1n,
+        -2n,
       );
       const invalidHistorySelection = invalidHistoryProbe.select(invalidHistoryCamera, canvas.width, canvas.height);
       const historyDiagnostics = presentationHistory.diagnostics();

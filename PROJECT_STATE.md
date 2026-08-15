@@ -3,6 +3,15 @@
 **State date:** 2026-08-08  
 **Project phase:** `FIRST_TASK.md` is reviewed complete on the primary AMD validation machine. The completion review is preserved in `docs/FIRST_TASK_COMPLETION_REPORT.md`; clean-commit evidence is under `evidence/phase-0-amd-rdna4-edge151-2026-08-08/`. The live shallow explorer at `https://byronbuzz.github.io/webgpu-zoomer/` has exact pointer-focused interaction, display-rate presentation-only interpolation, conservative publication/accepted storage, exact versioned non-square viewport planning, logically cancellable asynchronous shallow-direct work admission, deterministic one-way presentation snapshots, an isolated fail-closed WebGPU snapshot overlay, and bounded quality-monotonic presentation history with exact-match selection. The next bounded slice is an executable geometric validity contract for limited pan/zoom history reprojection; deep perturbation and production scheduling remain later tasks. Branded Chrome and NVIDIA cross-hardware comparison remain open.
 
+## Control
+
+- **Active task:** `TASK_002_HISTORY_REPROJECTION.md`
+- **Task status:** `active`
+- **Last accepted task:** `FIRST_TASK.md`
+- **Acceptance evidence:** `docs/FIRST_TASK_COMPLETION_REPORT.md`; `evidence/phase-0-amd-rdna4-edge151-2026-08-08/`
+- **State reconciled at:** `34a1ab139ca023563d5fa5ec25fc0727d84bcd99`
+- **Transition rule:** change the active-task pointer only after the current task is accepted with evidence or explicitly blocked with evidence; preserve completed task files as historical contracts.
+
 ## Settled
 
 - S-001 — Product is a fully client-side static web application; no backend is required for correctness or basic operation.

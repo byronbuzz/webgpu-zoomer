@@ -103,7 +103,7 @@ describe("bounded presentation history", () => {
     expect(history.diagnostics().residentViews).toBe(2);
   });
 
-  it("selects exact spatial history and rejects unproven transforms or viewport changes", () => {
+  it("selects exact spatial history, admits the declared one-step transform, and rejects viewport changes", () => {
     const history = new PresentationHistoryStore(2);
     const sourceCamera = camera(1n);
     history.publish(snapshot(sourceCamera, [0]));
@@ -113,9 +113,31 @@ describe("bounded presentation history", () => {
     if (!selected.selected) throw new Error("Expected exact spatial history selection.");
     expect(selected.frame.requestEpoch).toBe("1");
     expect(history.select(createCamera(sourceCamera.centerX, sourceCamera.centerY, dyadic(1n, -1n), 2n), 400, 400))
-      .toEqual({ selected: false, reason: "invalid_transform" });
+      .toMatchObject({ selected: true, reprojection: { targetScaleExponentDelta: "-1" } });
     expect(history.select(sameSpatialNewEpoch, 401, 400))
       .toEqual({ selected: false, reason: "viewport_mismatch" });
+  });
+
+  it("selects only the declared one-step dyadic pan/zoom domain and rejects adjacent out-of-bound transforms", () => {
+    const history = new PresentationHistoryStore(2);
+    const sourceCamera = camera(1n);
+    history.publish(snapshot(sourceCamera, [0]));
+    const inBound = createCamera(dyadic(1n, -2n), dyadic(0n, 0n), dyadic(1n, -1n), 2n);
+    const selected = history.select(inBound, 400, 400);
+    expect(selected).toMatchObject({
+      selected: true,
+      reprojection: {
+        kind: "limited_dyadic_pan_zoom_v1",
+        targetScaleExponentDelta: "-1",
+        maximumSourceCenterOffset: { numerator: "1", exponent: "-1" },
+      },
+    });
+    expect(history.select(createCamera(dyadic(1n, -1n), dyadic(0n, 0n), dyadic(1n, 0n), 3n), 400, 400))
+      .toMatchObject({ selected: true, reprojection: { targetScaleExponentDelta: "0" } });
+    expect(history.select(createCamera(dyadic(0n, 0n), dyadic(0n, 0n), dyadic(1n, -2n), 4n), 400, 400))
+      .toEqual({ selected: false, reason: "invalid_transform" });
+    expect(history.select(createCamera(dyadic(3n, -2n), dyadic(0n, 0n), dyadic(1n, 0n), 4n), 400, 400))
+      .toEqual({ selected: false, reason: "invalid_transform" });
   });
 
   it("has no history import path into camera, planning, numerical, snapshot, or GPU authority", () => {

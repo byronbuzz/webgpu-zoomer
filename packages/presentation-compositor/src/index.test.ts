@@ -5,7 +5,8 @@ import { planViewportSampleGrid } from "@webgpu-zoomer/view-planner";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { prepareSnapshotComposite } from "./index.js";
+import { prepareHistoryComposite, prepareSnapshotComposite } from "./index.js";
+import { PresentationHistoryStore } from "@webgpu-zoomer/presentation-history";
 
 function acceptedFor(key: WorldKey, epoch: bigint): AcceptedSampleSnapshot {
   const decision = evaluateShallowDirectPublication({
@@ -98,6 +99,34 @@ describe("current-view presentation compositor", () => {
     expect(prepareSnapshotComposite(deepSnapshot, deepCamera, 400, 400)).toEqual({
       accepted: false,
       reason: "precision_limit",
+    });
+  });
+
+  it("renders selected bounded history against the target camera without permitting an unselected transform", () => {
+    const { snapshot } = fixture();
+    const history = new PresentationHistoryStore(2);
+    history.publish(snapshot);
+    const target = createCamera(dyadic(1n, -2n), dyadic(0n, 0n), dyadic(1n, -1n), 4n);
+    const selection = history.select(target, 400, 400);
+    expect(selection.selected).toBe(true);
+    if (!selection.selected) throw new Error("Expected bounded history selection.");
+    const prepared = prepareHistoryComposite(selection.frame, selection.reprojection, target, 400, 400);
+    expect(prepared).toMatchObject({
+      accepted: true,
+      historyFrameId: selection.frame.frameId,
+      reprojection: { kind: "limited_dyadic_pan_zoom_v1", targetScaleExponentDelta: "-1" },
+      cellCount: 4,
+    });
+    expect(prepareHistoryComposite(selection.frame, undefined, target, 400, 400)).toEqual({
+      accepted: false,
+      reason: "camera_mismatch",
+    });
+    expect(prepareHistoryComposite(selection.frame, {
+      ...selection.reprojection!,
+      targetScaleExponentDelta: "0",
+    }, target, 400, 400)).toEqual({
+      accepted: false,
+      reason: "camera_mismatch",
     });
   });
 

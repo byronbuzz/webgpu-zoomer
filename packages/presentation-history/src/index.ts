@@ -1,4 +1,4 @@
-import { serializeCamera, type ExactCamera, type SerializedCamera } from "@webgpu-zoomer/exact-camera";
+import { compare, deserializeCamera, dyadic, negate, serializeCamera, serializeDyadic, subtract, type ExactCamera, type SerializedCamera } from "@webgpu-zoomer/exact-camera";
 import type { PresentationCell, PresentationSnapshot } from "@webgpu-zoomer/presentation-snapshot";
 
 export type HistoryCell = (PresentationCell & Readonly<{
@@ -30,9 +30,16 @@ export type HistoryPublishResult = Readonly<{
   evictedViewKey?: string;
 }>;
 
+export type HistoryReprojection = Readonly<{
+  kind: "limited_dyadic_pan_zoom_v1";
+  targetScaleExponentDelta: string;
+  maximumSourceCenterOffset: SerializedCamera["viewportScale"];
+}>;
+
 export type HistorySelection = Readonly<{
   selected: true;
   frame: PresentationHistoryFrame;
+  reprojection?: HistoryReprojection;
 }> | Readonly<{
   selected: false;
   reason: "no_history" | "invalid_transform" | "viewport_mismatch";
@@ -126,6 +133,34 @@ function sameSpatialCamera(left: SerializedCamera, right: SerializedCamera): boo
   return JSON.stringify(spatialCamera(left)) === JSON.stringify(spatialCamera(right));
 }
 
+function withinClosedDyadicRange(value: ExactCamera["centerX"], limit: ExactCamera["centerX"]): boolean {
+  return compare(value, limit) <= 0 && compare(value, negate(limit)) >= 0;
+}
+
+export function historyReprojectionFor(
+  frame: PresentationHistoryFrame,
+  target: ExactCamera,
+): HistoryReprojection | undefined {
+  try {
+    const source = deserializeCamera(frame.camera);
+    if (source.viewportScale.numerator !== target.viewportScale.numerator) return undefined;
+    const targetScaleExponentDelta = target.viewportScale.exponent - source.viewportScale.exponent;
+    if (targetScaleExponentDelta < -1n || targetScaleExponentDelta > 1n) return undefined;
+    const maximumSourceCenterOffset = dyadic(source.viewportScale.numerator, source.viewportScale.exponent - 1n);
+    const offsetX = subtract(target.centerX, source.centerX);
+    const offsetY = subtract(target.centerY, source.centerY);
+    if (!withinClosedDyadicRange(offsetX, maximumSourceCenterOffset)
+      || !withinClosedDyadicRange(offsetY, maximumSourceCenterOffset)) return undefined;
+    return Object.freeze({
+      kind: "limited_dyadic_pan_zoom_v1",
+      targetScaleExponentDelta: targetScaleExponentDelta.toString(),
+      maximumSourceCenterOffset: serializeDyadic(maximumSourceCenterOffset),
+    });
+  } catch {
+    return undefined;
+  }
+}
+
 export class PresentationHistoryStore {
   readonly #maximumViews: number;
   readonly #views = new Map<string, StoredFrame>();
@@ -209,17 +244,39 @@ export class PresentationHistoryStore {
 
   select(camera: ExactCamera, viewportWidth: number, viewportHeight: number): HistorySelection {
     if (this.#views.size === 0) return { selected: false, reason: "no_history" };
+    if (!Number.isSafeInteger(viewportWidth) || viewportWidth < 1
+      || !Number.isSafeInteger(viewportHeight) || viewportHeight < 1) {
+      return { selected: false, reason: "viewport_mismatch" };
+    }
+    const stored = [...this.#views.values()];
     const serialized = serializeCamera(camera);
-    const spatialMatches = [...this.#views.values()].filter(({ frame }) => sameSpatialCamera(frame.camera, serialized));
-    if (spatialMatches.length === 0) return { selected: false, reason: "invalid_transform" };
-    const viewportMatches = spatialMatches.filter(({ frame }) => frame.domain.width === viewportWidth
+    const spatialMatches = stored.filter(({ frame }) => sameSpatialCamera(frame.camera, serialized));
+    const exactViewportMatches = spatialMatches.filter(({ frame }) => frame.domain.width === viewportWidth
       && frame.domain.height === viewportHeight);
-    if (viewportMatches.length === 0) return { selected: false, reason: "viewport_mismatch" };
-    viewportMatches.sort((left, right) => {
+    exactViewportMatches.sort((left, right) => {
       const epochOrder = BigInt(right.frame.requestEpoch) - BigInt(left.frame.requestEpoch);
       return epochOrder < 0n ? -1 : epochOrder > 0n ? 1 : left.frame.viewKey.localeCompare(right.frame.viewKey);
     });
-    return Object.freeze({ selected: true, frame: viewportMatches[0]!.frame });
+    if (exactViewportMatches.length > 0) return Object.freeze({ selected: true, frame: exactViewportMatches[0]!.frame });
+    if (spatialMatches.length > 0) return { selected: false, reason: "viewport_mismatch" };
+
+    const viewportMatches = stored.filter(({ frame }) => frame.domain.width === viewportWidth
+      && frame.domain.height === viewportHeight);
+    if (viewportMatches.length === 0) return { selected: false, reason: "viewport_mismatch" };
+    const reprojectable = viewportMatches.flatMap(({ frame }) => {
+      const reprojection = historyReprojectionFor(frame, camera);
+      return reprojection ? [{ frame, reprojection }] : [];
+    });
+    reprojectable.sort((left, right) => {
+      const epochOrder = BigInt(right.frame.requestEpoch) - BigInt(left.frame.requestEpoch);
+      return epochOrder < 0n ? -1 : epochOrder > 0n ? 1 : left.frame.viewKey.localeCompare(right.frame.viewKey);
+    });
+    if (reprojectable.length === 0) return { selected: false, reason: "invalid_transform" };
+    return Object.freeze({
+      selected: true,
+      frame: reprojectable[0]!.frame,
+      reprojection: reprojectable[0]!.reprojection,
+    });
   }
 
   snapshot(): readonly PresentationHistoryFrame[] {

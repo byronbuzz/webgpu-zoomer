@@ -23,4 +23,4 @@ On a physical AMD or NVIDIA validation machine with current stable Google Chrome
 
 ## Authority
 
-Read `00_START_HERE.md`, `PROJECT_STATE.md`, and `FIRST_TASK.md` first. `AUTHORITY_REGISTER.md` and `MIGRATION.md` govern all use of legacy evidence.
+Read `00_START_HERE.md` and `PROJECT_STATE.md` first, then open the file named by **Active task**. `AUTHORITY_REGISTER.md` and `MIGRATION.md` govern all use of legacy evidence.

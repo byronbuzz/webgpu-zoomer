@@ -47,16 +47,17 @@ This is **not** a specification for revising WebGPU Fractal Zoomer v1.4 or mergi
 14. `DECISIONS.md` — accepted architectural/product decisions.
 15. `RESEARCH_NOTES.md` — evidence-derived findings and current platform facts.
 16. `RISKS_AND_OPEN_QUESTIONS.md` — unresolved matters and ranked risks.
-17. `FIRST_TASK.md` — first executable engineering task.
-18. `ASSET_MANIFEST.md` — supplied asset inventory.
-19. `AGENTS.md` — concise agent routing.
-20. `SKILLS_PLAN.md` — repository-native procedures to create only when useful.
+17. `FIRST_TASK.md` — completed Phase-0 task contract and historical acceptance context.
+18. `TASK_002_HISTORY_REPROJECTION.md` — current bounded engineering task while named by `PROJECT_STATE.md`.
+19. `ASSET_MANIFEST.md` — supplied asset inventory.
+20. `AGENTS.md` — concise agent routing.
+21. `SKILLS_PLAN.md` — repository-native procedures to create only when useful.
 
 ## Immediate next action
 
-Execute `FIRST_TASK.md`. Do **not** begin by porting the v1.4 renderer.
+Read `PROJECT_STATE.md`, open the file named by **Active task**, confirm its status is `active`, then execute that bounded task.
 
-The first implementation milestone is a trustworthy numerical-and-benchmark spine: exact camera/world coordinates, a Rust/WASM arbitrary-precision oracle/reference path, a deterministic fixture corpus, and a WebGPU kernel harness capable of proving or rejecting candidate perturbation/compaction strategies against that oracle.
+`FIRST_TASK.md` is completed historical context. Do not resume it unless `PROJECT_STATE.md` is explicitly reconciled to say otherwise.
 
 ## Critical warnings
 

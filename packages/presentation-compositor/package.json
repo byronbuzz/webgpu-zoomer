@@ -6,6 +6,7 @@
   "exports": "./src/index.ts",
   "dependencies": {
     "@webgpu-zoomer/exact-camera": "0.1.0",
+    "@webgpu-zoomer/presentation-history": "0.1.0",
     "@webgpu-zoomer/presentation-snapshot": "0.1.0"
   }
 }

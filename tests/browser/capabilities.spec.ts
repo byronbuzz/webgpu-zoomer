@@ -340,7 +340,7 @@ test("repeated exact-view publication remains one bounded history frame", async 
   expect(second.summary.scheduledStoreChecksum).toBe(first.summary.scheduledStoreChecksum);
 });
 
-test("composited snapshot invalidates on exact-camera change without changing numerical evidence", async ({ page }) => {
+test("bounded history reprojects on a one-step exact-camera change without changing numerical evidence", async ({ page }) => {
   await page.goto("./");
   await waitForIsolation(page);
   await page.locator("details.diagnostics").evaluate((details: HTMLDetailsElement) => { details.open = true; });
@@ -354,7 +354,19 @@ test("composited snapshot invalidates on exact-camera change without changing nu
   await page.mouse.move(bounds.x + bounds.width * 0.5, bounds.y + bounds.height * 0.5);
   await page.mouse.wheel(0, -100);
   await expect.poll(async () => (await readCamera(page)).epoch > cameraBefore.epoch).toBe(true);
-  await expect(page.locator("#preview")).toHaveAttribute("data-snapshot-state", "invalidated");
+  await expect(page.locator("#preview")).toHaveAttribute("data-snapshot-state", "history-reprojected");
+  await expect(page.locator("#preview")).toHaveAttribute("data-history-frame-id", /^presentation-history-frame:/);
+  await expect(page.locator("#preview")).toHaveAttribute("data-history-checksum", /^fnv1a64:[0-9a-f]{16}$/);
+  const reprojection = JSON.parse((await page.locator("#preview").getAttribute("data-history-reprojection")) ?? "null") as {
+    kind: string;
+    targetScaleExponentDelta: string;
+    maximumSourceCenterOffset: { numerator: string; exponent: string };
+  } | null;
+  expect(reprojection).toEqual({
+    kind: "limited_dyadic_pan_zoom_v1",
+    targetScaleExponentDelta: "-1",
+    maximumSourceCenterOffset: { numerator: "11", exponent: "-3" },
+  });
   await expect(page.locator("#preview")).not.toHaveAttribute("data-snapshot-checksum", /.+/);
   const after = JSON.parse(await page.locator("#results").innerText()) as HarnessResult;
   expect(after.summary.acceptedStoreChecksum).toBe(before.summary.acceptedStoreChecksum);

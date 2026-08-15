@@ -6,7 +6,9 @@ Use `AUTHORITY_REGISTER.md` to resolve conflicts. Current explicit human decisio
 
 ## State
 
-Maintain `PROJECT_STATE.md` under **Settled · Assumed · Open · Superseded · Next**. Never silently promote an assumption to settled.
+Maintain `PROJECT_STATE.md` under **Control · Settled · Assumed · Open · Superseded · Next**. Never silently promote an assumption to settled.
+
+`PROJECT_STATE.md` is canonical for current workflow position and active-task identity. Task files are bounded execution/acceptance contracts. Preserve accepted task files as historical evidence; do not overwrite them into the next task. Advance the active-task pointer only after acceptance evidence exists or an explicit blocker is recorded. Resolve state/evidence disagreement by inspection, never optimistic status editing.
 
 ## Persistent location
 
@@ -64,5 +66,5 @@ Explicit approval is required before introducing production network services, au
 - interfaces: `INTERFACES.md`
 - decisions: `DECISIONS.md`
 - validation: `VALIDATION.md`, `ACCEPTANCE_TESTS.md`
-- current workflow position: `PROJECT_STATE.md`, `FIRST_TASK.md`
+- current workflow position and active-task pointer: `PROJECT_STATE.md`; bounded task contract: the file named there
 - risks/open matters: `RISKS_AND_OPEN_QUESTIONS.md`

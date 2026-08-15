@@ -7,7 +7,8 @@ import {
   type ExactDyadic,
 } from "@webgpu-zoomer/exact-camera";
 import { approximateDyadic } from "@webgpu-zoomer/exact-camera/approximate";
-import type { PresentationSnapshot } from "@webgpu-zoomer/presentation-snapshot";
+import { historyReprojectionFor, type HistoryReprojection, type PresentationHistoryFrame } from "@webgpu-zoomer/presentation-history";
+import type { PresentationCell, PresentationSnapshot } from "@webgpu-zoomer/presentation-snapshot";
 import { presentationCompositeShader } from "./composite.wgsl.js";
 
 const floatsPerCell = 8;
@@ -18,6 +19,8 @@ export type PreparedSnapshotComposite = Readonly<{
   accepted: true;
   snapshotId: string;
   checksum: string;
+  historyFrameId?: string;
+  reprojection?: HistoryReprojection;
   cellCount: number;
   acceptedCount: number;
   unresolvedCount: number;
@@ -50,12 +53,49 @@ function boundedF32(value: number, pixelExtent: number): number | undefined {
   return Object.is(encoded, -0) ? 0 : encoded;
 }
 
-function sameCamera(snapshot: PresentationSnapshot, camera: ExactCamera): boolean {
-  return JSON.stringify(snapshot.camera) === JSON.stringify(serializeCamera(camera));
+type CompositeSource = Readonly<{
+  snapshotId: string;
+  checksum: string;
+  authority: "presentation-only" | "presentation-history-only";
+  camera: PresentationSnapshot["camera"];
+  level: string;
+  domain: NonNullable<PresentationSnapshot["domain"]> | undefined;
+  counts: Readonly<{ total: number; accepted: number; unresolved: number }>;
+  cells: readonly PresentationCell[];
+}>;
+
+function sameCamera(serialized: PresentationSnapshot["camera"], camera: ExactCamera): boolean {
+  return JSON.stringify(serialized) === JSON.stringify(serializeCamera(camera));
 }
 
-export function prepareSnapshotComposite(
-  snapshot: PresentationSnapshot,
+function sourceFromSnapshot(snapshot: PresentationSnapshot): CompositeSource {
+  return Object.freeze({
+    snapshotId: snapshot.snapshotId,
+    checksum: snapshot.checksum,
+    authority: snapshot.authority,
+    camera: snapshot.camera,
+    level: snapshot.level,
+    domain: snapshot.domain,
+    counts: snapshot.counts,
+    cells: snapshot.cells,
+  });
+}
+
+function sourceFromHistory(frame: PresentationHistoryFrame): CompositeSource {
+  return Object.freeze({
+    snapshotId: frame.latestSnapshotId,
+    checksum: frame.checksum,
+    authority: frame.authority,
+    camera: frame.camera,
+    level: frame.level,
+    domain: frame.domain,
+    counts: frame.counts,
+    cells: frame.cells,
+  });
+}
+
+function prepareComposite(
+  source: CompositeSource,
   camera: ExactCamera,
   viewportWidth: number,
   viewportHeight: number,
@@ -64,30 +104,28 @@ export function prepareSnapshotComposite(
     || !Number.isSafeInteger(viewportHeight) || viewportHeight < 1) {
     return Object.freeze({ accepted: false, reason: "viewport_mismatch" });
   }
-  if (!sameCamera(snapshot, camera)) return Object.freeze({ accepted: false, reason: "camera_mismatch" });
-  if (!snapshot.domain || snapshot.domain.kind !== "integer-aspect" || snapshot.domain.version !== 1
-    || snapshot.domain.width !== viewportWidth || snapshot.domain.height !== viewportHeight) {
+  if (!source.domain || source.domain.kind !== "integer-aspect" || source.domain.version !== 1
+    || source.domain.width !== viewportWidth || source.domain.height !== viewportHeight) {
     return Object.freeze({ accepted: false, reason: "viewport_mismatch" });
   }
-  if (snapshot.cells.length > maximumCompositeCells) {
+  if (source.cells.length > maximumCompositeCells) {
     return Object.freeze({ accepted: false, reason: "resource_budget_exhausted" });
   }
-  if (snapshot.cells.length !== snapshot.counts.total
-    || snapshot.counts.accepted + snapshot.counts.unresolved !== snapshot.counts.total
-    || snapshot.authority !== "presentation-only") {
+  if (source.cells.length !== source.counts.total
+    || source.counts.accepted + source.counts.unresolved !== source.counts.total
+    || (source.authority !== "presentation-only" && source.authority !== "presentation-history-only")) {
     return Object.freeze({ accepted: false, reason: "invalid_snapshot" });
   }
 
-  const snapshotCamera = deserializeCamera(snapshot.camera);
-  const scale = exactFinite(snapshotCamera.viewportScale);
-  if (scale === undefined || scale <= 0) return Object.freeze({ accepted: false, reason: "precision_limit" });
+  const targetScale = exactFinite(camera.viewportScale);
+  if (targetScale === undefined || targetScale <= 0) return Object.freeze({ accepted: false, reason: "precision_limit" });
   const aspect = viewportWidth / viewportHeight;
-  const instances = new Float32Array(snapshot.cells.length * floatsPerCell);
+  const instances = new Float32Array(source.cells.length * floatsPerCell);
   let acceptedCount = 0;
   let unresolvedCount = 0;
-  for (let index = 0; index < snapshot.cells.length; index += 1) {
-    const cell = snapshot.cells[index]!;
-    if (cell.key.level !== snapshot.level) return Object.freeze({ accepted: false, reason: "invalid_snapshot" });
+  for (let index = 0; index < source.cells.length; index += 1) {
+    const cell = source.cells[index]!;
+    if (cell.key.level !== source.level) return Object.freeze({ accepted: false, reason: "invalid_snapshot" });
     let x: bigint;
     let y: bigint;
     let level: bigint;
@@ -98,17 +136,17 @@ export function prepareSnapshotComposite(
     } catch {
       return Object.freeze({ accepted: false, reason: "invalid_snapshot" });
     }
-    const minimumX = exactFinite(subtract(dyadic(x, level), snapshotCamera.centerX));
-    const maximumX = exactFinite(subtract(dyadic(x + 1n, level), snapshotCamera.centerX));
-    const minimumY = exactFinite(subtract(dyadic(y, level), snapshotCamera.centerY));
-    const maximumY = exactFinite(subtract(dyadic(y + 1n, level), snapshotCamera.centerY));
+    const minimumX = exactFinite(subtract(dyadic(x, level), camera.centerX));
+    const maximumX = exactFinite(subtract(dyadic(x + 1n, level), camera.centerX));
+    const minimumY = exactFinite(subtract(dyadic(y, level), camera.centerY));
+    const maximumY = exactFinite(subtract(dyadic(y + 1n, level), camera.centerY));
     if (minimumX === undefined || maximumX === undefined || minimumY === undefined || maximumY === undefined) {
       return Object.freeze({ accepted: false, reason: "precision_limit" });
     }
-    const clipMinimumX = boundedF32(2 * minimumX / (aspect * scale), viewportWidth);
-    const clipMaximumX = boundedF32(2 * maximumX / (aspect * scale), viewportWidth);
-    const clipMinimumY = boundedF32(-2 * maximumY / scale, viewportHeight);
-    const clipMaximumY = boundedF32(-2 * minimumY / scale, viewportHeight);
+    const clipMinimumX = boundedF32(2 * minimumX / (aspect * targetScale), viewportWidth);
+    const clipMaximumX = boundedF32(2 * maximumX / (aspect * targetScale), viewportWidth);
+    const clipMinimumY = boundedF32(-2 * maximumY / targetScale, viewportHeight);
+    const clipMaximumY = boundedF32(-2 * minimumY / targetScale, viewportHeight);
     if (clipMinimumX === undefined || clipMaximumX === undefined
       || clipMinimumY === undefined || clipMaximumY === undefined) {
       return Object.freeze({ accepted: false, reason: "precision_limit" });
@@ -128,19 +166,50 @@ export function prepareSnapshotComposite(
       unresolvedCount += 1;
     }
   }
-  if (acceptedCount !== snapshot.counts.accepted || unresolvedCount !== snapshot.counts.unresolved) {
+  if (acceptedCount !== source.counts.accepted || unresolvedCount !== source.counts.unresolved) {
     return Object.freeze({ accepted: false, reason: "invalid_snapshot" });
   }
   return Object.freeze({
     accepted: true,
-    snapshotId: snapshot.snapshotId,
-    checksum: snapshot.checksum,
-    cellCount: snapshot.cells.length,
+    snapshotId: source.snapshotId,
+    checksum: source.checksum,
+    cellCount: source.cells.length,
     acceptedCount,
     unresolvedCount,
     transformErrorLimitPx: maximumTransformErrorPx,
     instances,
   });
+}
+
+export function prepareSnapshotComposite(
+  snapshot: PresentationSnapshot,
+  camera: ExactCamera,
+  viewportWidth: number,
+  viewportHeight: number,
+): SnapshotCompositePreparation {
+  if (!sameCamera(snapshot.camera, camera)) return Object.freeze({ accepted: false, reason: "camera_mismatch" });
+  return prepareComposite(sourceFromSnapshot(snapshot), camera, viewportWidth, viewportHeight);
+}
+
+export function prepareHistoryComposite(
+  frame: PresentationHistoryFrame,
+  reprojection: HistoryReprojection | undefined,
+  camera: ExactCamera,
+  viewportWidth: number,
+  viewportHeight: number,
+): SnapshotCompositePreparation {
+  if (reprojection) {
+    const validated = historyReprojectionFor(frame, camera);
+    if (!validated || JSON.stringify(validated) !== JSON.stringify(reprojection)) {
+      return Object.freeze({ accepted: false, reason: "camera_mismatch" });
+    }
+  } else if (!sameCamera(frame.camera, camera)) {
+    return Object.freeze({ accepted: false, reason: "camera_mismatch" });
+  }
+  const prepared = prepareComposite(sourceFromHistory(frame), camera, viewportWidth, viewportHeight);
+  return prepared.accepted
+    ? Object.freeze({ ...prepared, historyFrameId: frame.frameId, ...(reprojection ? { reprojection } : {}) })
+    : prepared;
 }
 
 export async function createSnapshotCompositor(device: GPUDevice, canvas: HTMLCanvasElement): Promise<SnapshotCompositor> {

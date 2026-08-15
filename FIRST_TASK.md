@@ -1,5 +1,12 @@
 # First Task — Build the Numerical Authority and Experimental Spine
 
+## Lifecycle
+
+- **Status:** `accepted`
+- **Controlling state:** `PROJECT_STATE.md`
+- **Completion review:** `docs/FIRST_TASK_COMPLETION_REPORT.md`
+- **Primary acceptance evidence:** `evidence/phase-0-amd-rdna4-edge151-2026-08-08/`
+
 ```yaml
 Goal:
   Create the clean successor repository and establish an executable, independently

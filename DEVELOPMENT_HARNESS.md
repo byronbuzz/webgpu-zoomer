@@ -136,6 +136,16 @@ evidence_locations:
 
 No unexecuted command appears under `commands_executed`.
 
+### Task transition protocol
+
+1. Reconcile `PROJECT_STATE.md`, the active task, repository state, and relevant evidence before work.
+2. Execute only the bounded active task.
+3. Run claim-scoped verification and map each live completion claim to actual evidence.
+4. If accepted, preserve completion evidence and update `PROJECT_STATE.md`.
+5. Only then advance **Active task** to a successor contract.
+6. If blocked, record the blocker evidence and make the blocked state explicit.
+7. Stop when the active acceptance contract is satisfied; do not add unrelated post-acceptance work.
+
 ## 6. Numerical development loop
 
 For each new numerical method:

@@ -17,4 +17,6 @@ Never:
 
 If numerical validity is uncertain, return/escalate `unresolved`.
 
-The current executable task is always `FIRST_TASK.md`; update `PROJECT_STATE.md` when it advances.
+`PROJECT_STATE.md` is canonical for the current workflow position and active-task identity. Load only the file named by **Active task** and verify its status is `active` before implementation. If the pointer is missing, contradictory, or already satisfied by evidence, reconcile the control plane before editing product code.
+
+After accepted work, preserve the task/evidence record and update `PROJECT_STATE.md` before advancing to a successor task.
