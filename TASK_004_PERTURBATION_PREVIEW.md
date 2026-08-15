@@ -51,7 +51,7 @@ Remove the f32 display stop as a user-directed, presentation-only policy change,
 - 2026-08-16: `npm run verify` passed fixture validation, TypeScript, 45 Vitest tests, 5 script tests, 7 Rust tests, the pinned Wasm build, and the production build.
 - 2026-08-16: headed stable Edge suite with `WEBGPU_ZOOMER_BROWSER_CHANNEL=msedge` passed 8/8. The target trajectory repeatedly aimed at `-0.777120613150274923773 + 0.126857238786361887169i`, crossed the former direct-f32 guard, selected `bounded-f64-reference-perturbation-v1`, and preserved exact pointer focus.
 - Bounded transport tests verify finite high/low orbit storage and reject invalid/oversized iterations, invalid reference offsets, and invalid transport limits before GPU submission. `git diff --check` passed.
-- This acceptance is local only. No commit, push, deployment, or successor activation occurred.
+- Local acceptance preceded the user-authorized release: commit `9a6eae62fe18a7472066b0bb8d155abc2d976e3d` was pushed to `main`, GitHub Pages workflow `31908234956` passed, and live-origin HTTP readback confirmed the perturbation and approximate-preview assets. No successor activation occurred.
 ## Blocker protocol
 
 If a safe bounded perturbation implementation cannot be completed, record the failing contract, exact evidence, preserved state, and the smallest next bounded capability needed. Do not disguise the failure as a valid deep render.
