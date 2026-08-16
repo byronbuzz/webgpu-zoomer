@@ -22,10 +22,6 @@ const perturbationGlitchThreshold = 0.25;
 const maximumPerturbationTransportError = 2 ** -40;
 const shallowPerturbationPreviewIterations = 320;
 const adaptivePerturbationScale = 2 ** -20;
-const localReferenceAtlasColumns = 3;
-const localReferenceAtlasRows = 3;
-const localReferenceAtlasCount = localReferenceAtlasColumns * localReferenceAtlasRows;
-const localReferenceOrbitEntries = maximumPerturbationIterations + 1;
 
 export type DirectMandelbrotPreviewView = Readonly<{
   kind: "direct";
@@ -42,28 +38,24 @@ export type PerturbationMandelbrotPreviewView = Readonly<{
   viewportScale: number;
   iterationCap: number;
   glitchThreshold: number;
-  previewMode: "bounded-f64-reference-atlas-3x3-compensated-ds-v1";
+  previewMode: "bounded-f64-reference-compensated-ds-v1";
   transportError: number;
   transportLimit: number;
-  atlasColumns: 3;
-  atlasRows: 3;
+  referenceOffsetX: number;
+  referenceOffsetY: number;
   referenceOrbit: Float32Array;
 }>;
 
 export type MandelbrotPreviewView = DirectMandelbrotPreviewView | PerturbationMandelbrotPreviewView;
 
-export type PerturbationReferenceCoordinate = Readonly<{
-  centerX: number;
-  centerY: number;
-}>;
-
 export type PerturbationPreviewRequest = Readonly<{
   centerX: number;
   centerY: number;
   viewportScale: number;
+  referenceOffsetX?: number;
+  referenceOffsetY?: number;
   iterationCap?: number;
   transportErrorLimit?: number;
-  referenceCoordinates?: readonly PerturbationReferenceCoordinate[];
 }>;
 
 export function perturbationPreviewIterationCap(viewportScale: number): number {
@@ -87,48 +79,41 @@ export function createPerturbationPreviewView(
   request: PerturbationPreviewRequest,
 ): PerturbationMandelbrotPreviewView | undefined {
   const iterationCap = request.iterationCap ?? maximumPerturbationIterations;
+  const referenceOffsetX = request.referenceOffsetX ?? 0;
+  const referenceOffsetY = request.referenceOffsetY ?? 0;
   const transportLimit = request.transportErrorLimit ?? maximumPerturbationTransportError;
-  const referenceCoordinates = request.referenceCoordinates ?? Array.from(
-    { length: localReferenceAtlasCount },
-    () => Object.freeze({ centerX: request.centerX, centerY: request.centerY }),
-  );
   if (!Number.isSafeInteger(iterationCap) || iterationCap < 1 || iterationCap > maximumPerturbationIterations
     || !Number.isFinite(request.centerX) || !Number.isFinite(request.centerY)
     || !Number.isFinite(request.viewportScale) || request.viewportScale <= 0
-    || referenceCoordinates.length !== localReferenceAtlasCount
-    || referenceCoordinates.some((reference) => !Number.isFinite(reference.centerX) || !Number.isFinite(reference.centerY))
+    || !Number.isFinite(referenceOffsetX) || !Number.isFinite(referenceOffsetY)
+    || Math.max(Math.abs(referenceOffsetX), Math.abs(referenceOffsetY)) > perturbationGlitchThreshold
     || !Number.isFinite(transportLimit) || transportLimit <= 0 || transportLimit > maximumPerturbationTransportError) return undefined;
 
-  const referenceOrbit = new Float32Array(
-    localReferenceAtlasCount * localReferenceOrbitEntries * perturbationOrbitStride,
-  );
+  const referenceOrbit = new Float32Array((iterationCap + 1) * perturbationOrbitStride);
+  let real = 0;
+  let imaginary = 0;
   let transportError = 0;
-  for (let referenceIndex = 0; referenceIndex < localReferenceAtlasCount; referenceIndex += 1) {
-    const reference = referenceCoordinates[referenceIndex]!;
-    let real = 0;
-    let imaginary = 0;
-    for (let iteration = 0; iteration <= iterationCap; iteration += 1) {
-      if (!Number.isFinite(real) || !Number.isFinite(imaginary)
-        || Math.max(Math.abs(real), Math.abs(imaginary)) > perturbationReferenceMagnitudeLimit) return undefined;
-      const realTransport = splitFloat64(real);
-      const imaginaryTransport = splitFloat64(imaginary);
-      if (!realTransport || !imaginaryTransport) return undefined;
-      transportError = Math.max(
-        transportError,
-        Math.abs(real - (realTransport[0] + realTransport[1])),
-        Math.abs(imaginary - (imaginaryTransport[0] + imaginaryTransport[1])),
-      );
-      if (transportError > transportLimit) return undefined;
-      const offset = (referenceIndex * localReferenceOrbitEntries + iteration) * perturbationOrbitStride;
-      referenceOrbit[offset] = realTransport[0];
-      referenceOrbit[offset + 1] = realTransport[1];
-      referenceOrbit[offset + 2] = imaginaryTransport[0];
-      referenceOrbit[offset + 3] = imaginaryTransport[1];
-      if (iteration === iterationCap || real * real + imaginary * imaginary > 256) break;
-      const nextReal = real * real - imaginary * imaginary + reference.centerX;
-      imaginary = 2 * real * imaginary + reference.centerY;
-      real = nextReal;
-    }
+  for (let iteration = 0; iteration <= iterationCap; iteration += 1) {
+    if (!Number.isFinite(real) || !Number.isFinite(imaginary)
+      || Math.max(Math.abs(real), Math.abs(imaginary)) > perturbationReferenceMagnitudeLimit) return undefined;
+    const realTransport = splitFloat64(real);
+    const imaginaryTransport = splitFloat64(imaginary);
+    if (!realTransport || !imaginaryTransport) return undefined;
+    transportError = Math.max(
+      transportError,
+      Math.abs(real - (realTransport[0] + realTransport[1])),
+      Math.abs(imaginary - (imaginaryTransport[0] + imaginaryTransport[1])),
+    );
+    if (transportError > transportLimit) return undefined;
+    const offset = iteration * perturbationOrbitStride;
+    referenceOrbit[offset] = realTransport[0];
+    referenceOrbit[offset + 1] = realTransport[1];
+    referenceOrbit[offset + 2] = imaginaryTransport[0];
+    referenceOrbit[offset + 3] = imaginaryTransport[1];
+    if (iteration === iterationCap) break;
+    const nextReal = real * real - imaginary * imaginary + request.centerX;
+    imaginary = 2 * real * imaginary + request.centerY;
+    real = nextReal;
   }
 
   return Object.freeze({
@@ -138,11 +123,11 @@ export function createPerturbationPreviewView(
     viewportScale: request.viewportScale,
     iterationCap,
     glitchThreshold: perturbationGlitchThreshold,
-    previewMode: "bounded-f64-reference-atlas-3x3-compensated-ds-v1",
+    previewMode: "bounded-f64-reference-compensated-ds-v1",
     transportError,
     transportLimit,
-    atlasColumns: 3,
-    atlasRows: 3,
+    referenceOffsetX,
+    referenceOffsetY,
     referenceOrbit,
   });
 }
@@ -195,7 +180,7 @@ export async function createMandelbrotPreview(device: GPUDevice, canvas: HTMLCan
   });
   const referenceBuffer = device.createBuffer({
     label: "bounded-perturbation-reference-orbit",
-    size: localReferenceAtlasCount * localReferenceOrbitEntries * perturbationOrbitStride * Float32Array.BYTES_PER_ELEMENT,
+    size: (maximumPerturbationIterations + 1) * perturbationOrbitStride * Float32Array.BYTES_PER_ELEMENT,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
   });
   const directBindGroup = device.createBindGroup({
@@ -223,7 +208,7 @@ export async function createMandelbrotPreview(device: GPUDevice, canvas: HTMLCan
       device.queue.writeBuffer(referenceBuffer, 0, view.referenceOrbit);
       device.queue.writeBuffer(perturbationUniformBuffer, 0, new Float32Array([
         canvas.width, canvas.height, view.viewportScale, view.iterationCap,
-        view.glitchThreshold, 0, 0, 0,
+        view.glitchThreshold, view.referenceOffsetX, view.referenceOffsetY, 0,
       ]));
       pipeline = perturbationPipeline;
       bindGroup = perturbationBindGroup;
