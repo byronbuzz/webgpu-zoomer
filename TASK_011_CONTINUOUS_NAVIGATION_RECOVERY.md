@@ -60,6 +60,7 @@ If Task 5 cannot render within the interaction budget, retain exact camera respo
 - Queue evidence recorded maximum one render in flight and one replaceable pending request, with zero work remaining after release. Six sampled hold scales were strictly monotonic; steering consumed the new pointer focus without restarting a transition, and camera state remained unchanged for 100 ms after release.
 - Camera scale interpolation uses fixed-point bigint arithmetic and exact dyadic updates. The authoritative module still contains no `Number`, `parseFloat`, or `Math` reconstruction.
 - `npm run check:containment` and `git diff --check` passed. This is local acceptance only; it does not commit, push, deploy, change Task 5 numerical preview methods, or claim that the 5,000 reference request is the effective motion-preview cap.
+- Release update: Task 011 shipped with Tasks 012 and 013 in commit `735897cd811f209bf09d084e0a4f3b6be7b6deb9`. GitHub Pages workflow `31927230330` passed, live asset readback confirmed the progressive release, and the live-origin headed Edge suite passed 11/11 on AMD RDNA-4. Task 013 supersedes the temporary Task 5 iteration-policy limitation described above while preserving this task's navigation contract.
 
 ## Remaining limitation
 
