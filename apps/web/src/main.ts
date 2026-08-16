@@ -110,7 +110,6 @@ let requestedReferenceIterations = 8;
 let presentationStepDurationMs = Math.round(1_000 / zoomStepsPerSecond);
 const presentationHistory = new PresentationHistoryStore(4);
 let cameraAuthority: ExactCamera = initialCamera;
-let latestExactReferenceCoordinate: { x: ExactDyadic; y: ExactDyadic } | undefined;
 let renderPreview = () => {};
 let currentPresentationView: MandelbrotPreviewView | undefined;
 let drawPresentationView = (_view: MandelbrotPreviewView) => {};
@@ -297,19 +296,23 @@ function presentationView(camera: ExactCamera): MandelbrotPreviewView | null {
   const directApproximate = !Number.isFinite(centerX32) || !Number.isFinite(centerY32)
     || centerXError > halfPixelBudget || centerYError > halfPixelBudget || scaleError > halfPixelBudget;
   if (directApproximate) {
-    const referenceX = latestExactReferenceCoordinate ? approximateDyadic(latestExactReferenceCoordinate.x) : centerX;
-    const referenceY = latestExactReferenceCoordinate ? approximateDyadic(latestExactReferenceCoordinate.y) : centerY;
-    if (referenceX && referenceY) {
-      const perturbation = createPerturbationPreviewView({
-        centerX: referenceX.value,
-        centerY: referenceY.value,
-        viewportScale: viewportScale.value,
-        referenceOffsetX: centerX.value - referenceX.value,
-        referenceOffsetY: centerY.value - referenceY.value,
-        iterationCap: perturbationPreviewIterationCap(viewportScale.value),
-      });
-      if (perturbation) return perturbation;
-    }
+    const aspect = canvas.width / canvas.height;
+    const referenceCoordinates = Array.from({ length: 9 }, (_, referenceIndex) => {
+      const column = referenceIndex % 3;
+      const row = Math.floor(referenceIndex / 3);
+      return {
+        centerX: centerX.value + (column - 1) * aspect * viewportScale.value / 3,
+        centerY: centerY.value + (1 - row) * viewportScale.value / 3,
+      };
+    });
+    const perturbation = createPerturbationPreviewView({
+      centerX: centerX.value,
+      centerY: centerY.value,
+      viewportScale: viewportScale.value,
+      referenceCoordinates,
+      iterationCap: perturbationPreviewIterationCap(viewportScale.value),
+    });
+    if (perturbation) return perturbation;
   }
   if (!Number.isFinite(centerX32) || !Number.isFinite(centerY32)) return null;
   return {
@@ -436,7 +439,6 @@ function applyExactZoom(focus: { x: ExactDyadic; y: ExactDyadic }, exponentDelta
     y: serializeDyadic(focus.y),
   });
   const invariantFocus = worldAtFocus(cameraAuthority, focus);
-  latestExactReferenceCoordinate = invariantFocus;
   cameraAuthority = zoomAbout(cameraAuthority, focus.x, focus.y, exponentDelta);
   void compositePresentationHistory();
   const nextFocus = worldAtFocus(cameraAuthority, focus);
@@ -498,7 +500,6 @@ function installCameraInteraction(): void {
   resetButton.addEventListener("click", () => {
     cancelAnimationFrame(transitionFrame);
     clearPresentationSnapshot("invalidated");
-    latestExactReferenceCoordinate = undefined;
     cameraAuthority = createCamera(
       initialCamera.centerX,
       initialCamera.centerY,
@@ -532,7 +533,7 @@ async function initializePreview(): Promise<void> {
       currentPresentationView = view;
       preview.render(view);
       if (view.kind === "perturbation") {
-        previewStatusNode.textContent = "Compensated perturbation preview · non-authoritative";
+        previewStatusNode.textContent = "Local-reference atlas preview · non-authoritative";
         previewNode.dataset.state = "perturbation-preview";
         previewNode.dataset.previewMode = view.previewMode;
       } else if (view.approximate) {

@@ -3,6 +3,9 @@ export const maximumPerturbationIterations = 512;
 export const mandelbrotPerturbationPreviewShader = /* wgsl */ `
 const MAXIMUM_ITERATIONS: u32 = 512u;
 const SPLITTER: f32 = 4097.0;
+const ATLAS_COLUMNS: u32 = 3u;
+const ATLAS_ROWS: u32 = 3u;
+const REFERENCE_STRIDE: u32 = MAXIMUM_ITERATIONS + 1u;
 
 struct PerturbationUniforms {
   metrics: vec4f,
@@ -98,13 +101,24 @@ fn fragmentMain(@builtin(position) position: vec4f) -> @location(0) vec4f {
   let scale = preview.metrics.z;
   let iterationCap = min(u32(preview.metrics.w), MAXIMUM_ITERATIONS);
   let aspect = resolution.x / resolution.y;
-  let deltaC = (position.xy / resolution - vec2f(0.5)) * vec2f(aspect, -1.0) * scale + preview.guard.yz;
+  let normalized = position.xy / resolution;
+  let column = min(ATLAS_COLUMNS - 1u, u32(normalized.x * f32(ATLAS_COLUMNS)));
+  let row = min(ATLAS_ROWS - 1u, u32(normalized.y * f32(ATLAS_ROWS)));
+  let referenceIndex = row * ATLAS_COLUMNS + column;
+  let referenceAnchor = vec2f(
+    (f32(column) - 1.0) * aspect / 3.0,
+    (1.0 - f32(row)) / 3.0,
+  );
+  let screenCoordinate = (normalized - vec2f(0.5)) * vec2f(aspect, -1.0);
+  let deltaC = (screenCoordinate - referenceAnchor) * scale;
   let glitchLimit = preview.guard.x;
   var delta = vec4f(0.0);
 
   for (var iteration = 0u; iteration < MAXIMUM_ITERATIONS; iteration += 1u) {
     if (iteration >= iterationCap) { break; }
-    let reference = referenceOrbit.values[iteration];
+    let reference = referenceOrbit.values[referenceIndex * REFERENCE_STRIDE + iteration];
+    let referenceMagnitudeSquared = complexMagnitudeSquared(reference);
+    if (referenceMagnitudeSquared.x > 256.0) { return colour(iteration, referenceMagnitudeSquared); }
     let nextDelta = complexAdd(
       complexAdd(complexScale(complexMultiply(reference, delta), 2.0), complexMultiply(delta, delta)),
       vec4f(deltaC.x, 0.0, deltaC.y, 0.0),
@@ -112,7 +126,7 @@ fn fragmentMain(@builtin(position) position: vec4f) -> @location(0) vec4f {
     if (!(max(max(abs(nextDelta.x), abs(nextDelta.y)), max(abs(nextDelta.z), abs(nextDelta.w))) <= glitchLimit)) {
       return vec4f(0.72, 0.14, 0.62, 1.0);
     }
-    let z = complexAdd(referenceOrbit.values[iteration + 1u], nextDelta);
+    let z = complexAdd(referenceOrbit.values[referenceIndex * REFERENCE_STRIDE + iteration + 1u], nextDelta);
     let magnitudeSquared = complexMagnitudeSquared(z);
     if (magnitudeSquared.x > 256.0) { return colour(iteration, magnitudeSquared); }
     delta = nextDelta;

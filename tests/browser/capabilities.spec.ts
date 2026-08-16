@@ -531,7 +531,7 @@ test("exact camera preserves pointer focus, round trips, and continues through t
     if (await page.locator("#preview").getAttribute("data-state") === "perturbation-preview") break;
   }
   await expect(page.locator("#preview")).toHaveAttribute("data-state", "perturbation-preview");
-  await expect(page.locator("#preview")).toHaveAttribute("data-preview-mode", "bounded-f64-reference-compensated-ds-v1");
+  await expect(page.locator("#preview")).toHaveAttribute("data-preview-mode", "bounded-f64-reference-atlas-3x3-compensated-ds-v1");
   const limitedCamera = await readCamera(page);
   await aimRecordedTarget();
   await page.mouse.wheel(0, -100);
