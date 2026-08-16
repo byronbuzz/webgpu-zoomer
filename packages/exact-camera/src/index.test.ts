@@ -2,15 +2,19 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  add,
   createCamera,
+  multiply,
   deserializeCamera,
   dyadic,
   floorAtLevel,
+  interpolateOctaveScale,
   serializeCamera,
   worldKey,
   zoomAbout,
+  zoomAboutScale,
 } from "./index.js";
-import { approximateDyadic } from "./approximate.js";
+import { approximateDyadic, boundedPositiveDyadic } from "./approximate.js";
 
 function generator(seed: bigint): () => bigint {
   let state = seed;
@@ -39,10 +43,56 @@ describe("exact dyadic camera", () => {
     }
   });
 
+  it("interpolates a continuous octave with bigint arithmetic and exact focus", () => {
+    const camera = createCamera(dyadic(-1n, -1n), dyadic(0n, 0n), dyadic(11n, -2n));
+    const focusX = dyadic(1n, -3n);
+    const focusY = dyadic(-3n, -4n);
+    const quarter = interpolateOctaveScale(camera.viewportScale, 1n, 2n, -1n);
+    const half = interpolateOctaveScale(camera.viewportScale, 2n, 2n, -1n);
+    const endpoint = interpolateOctaveScale(camera.viewportScale, 4n, 2n, -1n);
+    const outwardQuarter = interpolateOctaveScale(camera.viewportScale, 1n, 2n, 1n);
+    const outwardHalf = interpolateOctaveScale(camera.viewportScale, 2n, 2n, 1n);
+    const outwardEndpoint = interpolateOctaveScale(camera.viewportScale, 4n, 2n, 1n);
+    expect(approximateDyadic(quarter)!.value).toBeGreaterThan(approximateDyadic(half)!.value);
+    expect(approximateDyadic(outwardQuarter)!.value).toBeLessThan(approximateDyadic(outwardHalf)!.value);
+    expect(endpoint).toEqual(dyadic(11n, -3n));
+    expect(outwardEndpoint).toEqual(dyadic(11n, -1n));
+    const moved = zoomAboutScale(camera, focusX, focusY, quarter);
+    expect(add(moved.centerX, multiply(focusX, moved.viewportScale)))
+      .toEqual(add(camera.centerX, multiply(focusX, camera.viewportScale)));
+    expect(add(moved.centerY, multiply(focusY, moved.viewportScale)))
+      .toEqual(add(camera.centerY, multiply(focusY, camera.viewportScale)));
+  });
+
   it("serializes thousands-of-digits magnification without loss", () => {
     const camera = createCamera(dyadic(-3n, -2n), dyadic(1n, -4n), dyadic(1n, -20_000n), 9n);
     const encoded = serializeCamera(camera);
     expect(deserializeCamera(JSON.parse(JSON.stringify(encoded)))).toEqual(camera);
+  });
+
+  it("decomposes scale beyond binary64 range without losing its bigint exponent", () => {
+    expect(boundedPositiveDyadic(dyadic(11n, -2n))).toEqual({
+      significand: 1.375,
+      binaryExponent: 1n,
+      significandError: 0,
+    });
+    expect(boundedPositiveDyadic({ numerator: 22n, exponent: -3n })).toEqual({
+      significand: 1.375,
+      binaryExponent: 1n,
+      significandError: 0,
+    });
+    expect(boundedPositiveDyadic(dyadic(11n, -20_004n))).toEqual({
+      significand: 1.375,
+      binaryExponent: -20_001n,
+      significandError: 0,
+    });
+    expect(boundedPositiveDyadic(dyadic((1n << 80n) + 3n, -20_000n), 8)).toEqual({
+      significand: 1,
+      binaryExponent: -19_920n,
+      significandError: 1 / 128,
+    });
+    expect(boundedPositiveDyadic(dyadic(0n, -20_000n))).toBeNull();
+    expect(boundedPositiveDyadic(dyadic(-1n, -20_000n))).toBeNull();
   });
 
   it("uses mathematical floor in negative quadrants", () => {

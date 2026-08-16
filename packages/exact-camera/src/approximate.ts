@@ -5,6 +5,41 @@ export type BoundedNumber = Readonly<{
   absoluteError: number;
 }>;
 
+export type BoundedPositiveDyadic = Readonly<{
+  /** Finite lower-bound significand in [1, 2). */
+  significand: number;
+  /** Exact power of two paired with the significand. */
+  binaryExponent: bigint;
+  /** Exclusive upper distance from `significand` to the exact significand. */
+  significandError: number;
+}>;
+
+/**
+ * Decompose a positive dyadic without converting its exponent to `number`.
+ * This remains usable when the complete value would underflow or overflow
+ * binary64 and is presentation-only: it cannot reconstruct camera authority.
+ */
+export function boundedPositiveDyadic(value: ExactDyadic, retainedBits = 53): BoundedPositiveDyadic | null {
+  if (value.numerator <= 0n) return null;
+  if (!Number.isInteger(retainedBits) || retainedBits < 2 || retainedBits > 53) {
+    throw new RangeError("retainedBits must be an integer from 2 through 53");
+  }
+
+  const bitLength = value.numerator.toString(2).length;
+  const discardedBits = Math.max(0, bitLength - retainedBits);
+  const retained = value.numerator >> BigInt(discardedBits);
+  const retainedLength = bitLength - discardedBits;
+  const denominator = 2 ** (retainedLength - 1);
+  const significand = Number(retained) / denominator;
+  const hasDiscardedValue = discardedBits > 0
+    && value.numerator !== (retained << BigInt(discardedBits));
+  return Object.freeze({
+    significand,
+    binaryExponent: value.exponent + BigInt(bitLength - 1),
+    significandError: hasDiscardedValue ? 1 / denominator : 0,
+  });
+}
+
 /**
  * Derive a finite presentation value without feeding the approximation back
  * into exact authority. The error bound covers discarded low integer bits.

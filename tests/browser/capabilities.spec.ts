@@ -185,13 +185,106 @@ test("isolated stable browser harness reports capabilities", async ({ page }) =>
 test("exploration controls expose exact zoom cadence and a logarithmic 50,000-iteration ceiling", async ({ page }) => {
   await page.goto("./");
   await waitForIsolation(page);
+  await expect(page.locator("#preview")).toHaveAttribute("data-state", "ready");
+  const initialScale = JSON.parse((await page.locator("#preview").getAttribute("data-scale-telemetry")) ?? "null") as {
+    state: string;
+    scale: { significand: number; binaryExponent: string; significandError: number };
+    depth: { octaves: number; integerExponentDifference: string };
+  };
+  expect(initialScale).toMatchObject({
+    state: "bounded",
+    scale: { significand: 1.375, binaryExponent: "1", significandError: 0 },
+    depth: { octaves: 0, integerExponentDifference: "0" },
+  });
+  await expect(page.locator("#camera-readout")).toContainText("scale 1.3750000 × 2^1");
+  await expect(page.locator("#camera-readout")).not.toContainText("Infinity");
   await expect(page.locator("#zoom-speed-readout")).toHaveText(/steps\/s$/);
-  await page.locator("#zoom-speed").fill("12");
-  await expect(page.locator("#zoom-speed-readout")).toHaveText("12.0 steps/s");
+  await page.locator("#zoom-speed").fill("10");
+  await expect(page.locator("#zoom-speed-readout")).toHaveText("10.0 steps/s");
   await page.locator("#reference-iterations").fill("1000");
   await expect(page.locator("#reference-iterations-readout")).toHaveText("50,000");
   await expect(page.locator("#preview")).toHaveAttribute("data-reference-iteration-limit", "50000");
-  await expect(page.locator("#preview")).toHaveAttribute("data-zoom-steps-per-second", "12.0");
+  await expect(page.locator("#preview")).toHaveAttribute("data-zoom-steps-per-second", "10.0");
+  const iterationPolicy = JSON.parse(
+    (await page.locator("#preview").getAttribute("data-iteration-policy")) ?? "null",
+  ) as {
+    requestedVisibleConvergence: { iterationTarget: number; purpose: string };
+    effectiveConvergence: {
+      method: string;
+      iterationTarget: number;
+      iterationFrontier: number;
+      dispatchQuantum: number;
+      complete: boolean;
+      authority: string;
+    };
+    requestAffectsVisibleConvergence: boolean;
+    capExhaustionClassification: string;
+  };
+  expect(iterationPolicy).toMatchObject({
+    requestedVisibleConvergence: { iterationTarget: 50_000, purpose: "visible-current-view-convergence" },
+    effectiveConvergence: {
+      method: "progressive-direct-f32-v1",
+      iterationTarget: 50_000,
+      dispatchQuantum: 64,
+      authority: "presentation-only",
+    },
+    requestAffectsVisibleConvergence: true,
+    capExhaustionClassification: "unresolved",
+  });
+  expect(iterationPolicy.effectiveConvergence.iterationFrontier).toBeGreaterThan(0);
+  expect(iterationPolicy.effectiveConvergence.iterationFrontier).toBeLessThan(50_000);
+  expect(iterationPolicy.effectiveConvergence.complete).toBe(false);
+});
+
+test("iteration selection progressively changes visible current-view convergence", async ({ page }) => {
+  await page.goto("./");
+  await waitForIsolation(page);
+  await expect(page.locator("#preview")).toHaveAttribute("data-state", "ready");
+  const canvas = page.locator("#mandelbrot");
+  const shallow = await canvas.screenshot();
+  const position = Math.round(1_000 * Math.log(128 / 8) / Math.log(50_000 / 8));
+  await page.locator("#reference-iterations").fill(position.toString());
+  const selected = Number(await page.locator("#preview").getAttribute("data-reference-iteration-limit"));
+  expect(selected).toBeGreaterThan(8);
+  await expect.poll(async () => {
+    const policy = JSON.parse(
+      (await page.locator("#preview").getAttribute("data-iteration-policy")) ?? "null",
+    ) as {
+      effectiveConvergence?: {
+        iterationTarget?: number;
+        iterationFrontier?: number;
+        complete?: boolean;
+        coverage?: { status?: string; activePixels?: number; escapedPixels?: number; unresolvedPixels?: number };
+      };
+    };
+    return policy.effectiveConvergence;
+  }).toMatchObject({
+    iterationTarget: selected,
+    iterationFrontier: selected,
+    complete: true,
+    coverage: { status: "measured", activePixels: 0 },
+  });
+  const measuredPolicy = JSON.parse(
+    (await page.locator("#preview").getAttribute("data-iteration-policy")) ?? "null",
+  ) as { effectiveConvergence: { coverage: { escapedPixels: number; unresolvedPixels: number } } };
+  const backingPixels = await canvas.evaluate((element: HTMLCanvasElement) => element.width * element.height);
+  expect(measuredPolicy.effectiveConvergence.coverage.escapedPixels
+    + measuredPolicy.effectiveConvergence.coverage.unresolvedPixels).toBe(backingPixels);
+  const converged = await canvas.screenshot();
+  expect(converged.equals(shallow)).toBe(false);
+  await page.locator("#reference-iterations").fill("0");
+  await expect.poll(async () => {
+    const policy = JSON.parse(
+      (await page.locator("#preview").getAttribute("data-iteration-policy")) ?? "null",
+    ) as { effectiveConvergence?: { iterationTarget?: number; iterationFrontier?: number; complete?: boolean; requestReset?: boolean } };
+    return policy.effectiveConvergence;
+  }).toMatchObject({
+    iterationTarget: 8,
+    iterationFrontier: 8,
+    complete: true,
+    requestReset: true,
+  });
+  expect((await canvas.screenshot()).equals(shallow)).toBe(true);
 });
 
 test("50,000 iteration reference requests remain bounded and unresolved without a direct candidate", async ({ page }) => {
@@ -450,10 +543,85 @@ test("numerical diagnostics do not gate exact-camera input", async ({ page }) =>
   expect(result.workAdmission.settled.admissionReturnsPromise).toBe(false);
 });
 
-test("exact camera preserves pointer focus, round trips, and continues through the former f32 display guard", async ({ page }) => {
+test("held zoom consumes the latest steered pointer without restarting a transition queue", async ({ page }) => {
   await page.goto("./");
   await waitForIsolation(page);
   await expect(page.locator("#preview")).toHaveAttribute("data-state", "ready");
+  const canvas = page.locator("#mandelbrot");
+  const bounds = await canvas.boundingBox();
+  if (!bounds) throw new Error("Mandelbrot canvas has no layout bounds.");
+  const testIterationPosition = Math.round(1_000 * Math.log(5_000 / 8) / Math.log(50_000 / 8));
+  await page.locator("#reference-iterations").fill(testIterationPosition.toString());
+  await expect(page.locator("#reference-iterations-readout")).toHaveText("5,000");
+  const camera = await readCamera(page);
+  const targetReal = -0.777120613150274923773;
+  const targetImaginary = 0.126857238786361887169;
+  const focusX = (targetReal - approximateDyadic(camera.centerX)) / approximateDyadic(camera.viewportScale);
+  const focusY = (targetImaginary - approximateDyadic(camera.centerY)) / approximateDyadic(camera.viewportScale);
+  const start = {
+    x: bounds.x + bounds.width / 2 + focusX * bounds.height,
+    y: bounds.y + bounds.height / 2 - focusY * bounds.height,
+  };
+  const steered = { x: start.x + bounds.width * 0.08, y: start.y - bounds.height * 0.08 };
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  await expect.poll(async () => page.locator("#preview").getAttribute("data-last-focus")).not.toBeNull();
+  const firstFocus = await readLastFocus(page);
+  await page.mouse.move(steered.x, steered.y);
+  await expect.poll(async () => {
+    const latest = await readLastFocus(page);
+    return latest.x.numerator !== firstFocus.x.numerator || latest.y.numerator !== firstFocus.y.numerator;
+  }).toBe(true);
+  await page.mouse.up();
+  const stopped = await readCamera(page);
+  await page.waitForTimeout(100);
+  expect(await readCamera(page)).toEqual(stopped);
+  await expect(page.locator("#preview")).toHaveAttribute("data-presentation-state", "stopped");
+});
+
+test("right-button hold zooms outward continuously and stops immediately", async ({ page }) => {
+  await page.goto("./");
+  await waitForIsolation(page);
+  await expect(page.locator("#preview")).toHaveAttribute("data-state", "ready");
+  const testIterationPosition = Math.round(1_000 * Math.log(5_000 / 8) / Math.log(50_000 / 8));
+  await page.locator("#reference-iterations").fill(testIterationPosition.toString());
+  await expect(page.locator("#reference-iterations-readout")).toHaveText("5,000");
+  const canvas = page.locator("#mandelbrot");
+  const bounds = await canvas.boundingBox();
+  if (!bounds) throw new Error("Mandelbrot canvas has no layout bounds.");
+  const camera = await readCamera(page);
+  const focusX = (-0.777120613150274923773 - approximateDyadic(camera.centerX))
+    / approximateDyadic(camera.viewportScale);
+  const focusY = (0.126857238786361887169 - approximateDyadic(camera.centerY))
+    / approximateDyadic(camera.viewportScale);
+  await page.mouse.move(
+    bounds.x + bounds.width / 2 + focusX * bounds.height,
+    bounds.y + bounds.height / 2 - focusY * bounds.height,
+  );
+  await page.mouse.down({ button: "right" });
+  const scales: number[] = [];
+  for (let frame = 0; frame < 4; frame += 1) {
+    await page.waitForTimeout(55);
+    scales.push(approximateDyadic((await readCamera(page)).viewportScale));
+  }
+  await page.mouse.up({ button: "right" });
+  for (let index = 1; index < scales.length; index += 1) {
+    expect(scales[index]).toBeGreaterThan(scales[index - 1]!);
+    expect(scales[index]! / scales[index - 1]!).toBeLessThan(2);
+  }
+  const stopped = await readCamera(page);
+  await page.waitForTimeout(100);
+  expect(await readCamera(page)).toEqual(stopped);
+  await expect(page.locator("#preview")).toHaveAttribute("data-presentation-state", "stopped");
+});
+
+test("exact camera preserves pointer focus, round trips, and continues through the former f32 display guard", async ({ page, browser }, testInfo) => {
+  await page.goto("./");
+  await waitForIsolation(page);
+  await expect(page.locator("#preview")).toHaveAttribute("data-state", "ready");
+  const testIterationPosition = Math.round(1_000 * Math.log(5_000 / 8) / Math.log(50_000 / 8));
+  await page.locator("#reference-iterations").fill(testIterationPosition.toString());
+  await expect(page.locator("#reference-iterations-readout")).toHaveText("5,000");
 
   const canvas = page.locator("#mandelbrot");
   const bounds = await canvas.boundingBox();
@@ -501,13 +669,39 @@ test("exact camera preserves pointer focus, round trips, and continues through t
   expect(roundTrip.viewportScale).toEqual(before.viewportScale);
 
   await page.mouse.down();
-  await page.waitForTimeout(420);
+  const continuousScales: number[] = [];
+  for (let frame = 0; frame < 6; frame += 1) {
+    await page.waitForTimeout(55);
+    continuousScales.push(approximateDyadic((await readCamera(page)).viewportScale));
+  }
   await page.mouse.up();
+  expect(new Set(continuousScales).size).toBeGreaterThanOrEqual(5);
+  for (let index = 1; index < continuousScales.length; index += 1) {
+    expect(continuousScales[index]).toBeLessThan(continuousScales[index - 1]!);
+    expect(continuousScales[index]! / continuousScales[index - 1]!).toBeGreaterThan(0.5);
+  }
   const heldZoom = await readCamera(page);
   expect(heldZoom.epoch - roundTrip.epoch).toBeGreaterThanOrEqual(2n);
   const heldFocus = await readLastFocus(page);
   expect(worldAtFocus(heldZoom, heldFocus.x, heldFocus.y)).toEqual(worldAtFocus(roundTrip, heldFocus.x, heldFocus.y));
-  await expect(page.locator("#preview")).toHaveAttribute("data-presentation-state", "settled");
+  await expect(page.locator("#preview")).toHaveAttribute("data-presentation-state", "stopped");
+  await expect.poll(async () => {
+    const queue = JSON.parse((await page.locator("#preview").getAttribute("data-presentation-queue")) ?? "null") as {
+      inFlight: number;
+      pending: number;
+    } | null;
+    return queue?.inFlight === 0 && queue.pending === 0;
+  }).toBe(true);
+  const queue = JSON.parse((await page.locator("#preview").getAttribute("data-presentation-queue")) ?? "null") as {
+    maximumInFlight: number;
+    maximumPending: number;
+    replacedPending: number;
+    staleCompletions: number;
+  };
+  expect(queue.maximumInFlight).toBe(1);
+  expect(queue.maximumPending).toBe(1);
+  expect(queue.replacedPending).toBeGreaterThanOrEqual(0);
+  expect(queue.staleCompletions).toBeGreaterThanOrEqual(0);
   const telemetry = JSON.parse((await page.locator("#preview").getAttribute("data-motion-telemetry")) ?? "null") as {
     frameCount: number;
     maximumFocusErrorPx: number;
@@ -521,6 +715,61 @@ test("exact camera preserves pointer focus, round trips, and continues through t
   expect(telemetry!.maximumFocusErrorPx).toBeLessThan(0.75);
   expect(telemetry!.p95FrameMs).toBeLessThan(100);
   expect(telemetry!.authority).toBe("presentation-only");
+  const iterationPolicy = JSON.parse(
+    (await page.locator("#preview").getAttribute("data-iteration-policy")) ?? "null",
+  ) as {
+    requestedVisibleConvergence: { iterationTarget: number };
+    effectiveConvergence: { method: string; iterationTarget: number; iterationFrontier: number; authority: string };
+    requestAffectsVisibleConvergence: boolean;
+  };
+  expect(iterationPolicy).toMatchObject({
+    requestedVisibleConvergence: { iterationTarget: 5_000 },
+    effectiveConvergence: {
+      method: "progressive-direct-f32-v1",
+      iterationTarget: 5_000,
+      authority: "presentation-only",
+    },
+    requestAffectsVisibleConvergence: true,
+  });
+  expect(iterationPolicy.effectiveConvergence.iterationFrontier).toBeGreaterThan(0);
+  const scaleTelemetry = JSON.parse(
+    (await page.locator("#preview").getAttribute("data-scale-telemetry")) ?? "null",
+  ) as Record<string, unknown>;
+  const adapter = await page.evaluate(async () => {
+    const selected = await navigator.gpu.requestAdapter();
+    return selected ? {
+      vendor: selected.info.vendor,
+      architecture: selected.info.architecture,
+      device: selected.info.device,
+      description: selected.info.description,
+      isFallbackAdapter: selected.info.isFallbackAdapter,
+    } : null;
+  });
+  const task11Evidence = {
+    schemaVersion: 1,
+    target,
+    motion: telemetry,
+    queue,
+    viewport: {
+      width: bounds.width,
+      height: bounds.height,
+      devicePixelRatio: await page.evaluate(() => devicePixelRatio),
+    },
+    zoomStepsPerSecond: await page.locator("#preview").getAttribute("data-zoom-steps-per-second"),
+    requestedIterationLimit: await page.locator("#preview").getAttribute("data-reference-iteration-limit"),
+    previewMode: await page.locator("#preview").getAttribute("data-preview-mode"),
+    iterationPolicy,
+    scaleTelemetry,
+    browserVersion: browser.version(),
+    playwrightProject: testInfo.project.name,
+    adapter,
+  };
+  const task11EvidencePath = testInfo.outputPath("task-011-continuous-navigation.json");
+  await writeFile(task11EvidencePath, `${JSON.stringify(task11Evidence, null, 2)}\n`, "utf8");
+  await testInfo.attach("task-011-continuous-navigation", {
+    path: task11EvidencePath,
+    contentType: "application/json",
+  });
 
   let previousEpoch = heldZoom.epoch;
   for (let step = 0; step < 40; step += 1) {
@@ -532,6 +781,18 @@ test("exact camera preserves pointer focus, round trips, and continues through t
   }
   await expect(page.locator("#preview")).toHaveAttribute("data-state", "perturbation-preview");
   await expect(page.locator("#preview")).toHaveAttribute("data-preview-mode", "bounded-f64-reference-compensated-ds-v1");
+  await expect.poll(async () => {
+    const policy = JSON.parse(
+      (await page.locator("#preview").getAttribute("data-iteration-policy")) ?? "null",
+    ) as { effectiveConvergence?: { method?: string; iterationTarget?: number; iterationFrontier?: number; complete?: boolean; limitation?: string } };
+    return policy.effectiveConvergence;
+  }).toMatchObject({
+    method: "bounded-f64-reference-compensated-ds-v1",
+    iterationTarget: 5_000,
+    iterationFrontier: 512,
+    complete: false,
+    limitation: "reference_path_iteration_limit",
+  });
   const limitedCamera = await readCamera(page);
   await aimRecordedTarget();
   await page.mouse.wheel(0, -100);

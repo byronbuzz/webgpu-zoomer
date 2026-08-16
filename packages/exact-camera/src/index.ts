@@ -110,13 +110,13 @@ export function createCamera(
  * Zoom by an exact power of two about a focus expressed in viewport-scale units.
  * Positive `scaleExponentDelta` zooms out; negative values zoom in.
  */
-export function zoomAbout(
+export function zoomAboutScale(
   camera: ExactCamera,
   focusX: ExactDyadic,
   focusY: ExactDyadic,
-  scaleExponentDelta: bigint,
+  nextScale: ExactDyadic,
 ): ExactCamera {
-  const nextScale = scalePowerOfTwo(camera.viewportScale, scaleExponentDelta);
+  if (compare(nextScale, dyadic(0n, 0n)) <= 0) throw new RangeError("nextScale must be positive");
   const worldFocusX = add(camera.centerX, multiply(focusX, camera.viewportScale));
   const worldFocusY = add(camera.centerY, multiply(focusY, camera.viewportScale));
   return createCamera(
@@ -125,6 +125,47 @@ export function zoomAbout(
     nextScale,
     camera.epoch + 1n,
   );
+}
+
+export function zoomAbout(
+  camera: ExactCamera,
+  focusX: ExactDyadic,
+  focusY: ExactDyadic,
+  scaleExponentDelta: bigint,
+): ExactCamera {
+  return zoomAboutScale(camera, focusX, focusY, scalePowerOfTwo(camera.viewportScale, scaleExponentDelta));
+}
+
+/**
+ * Returns an exact dyadic approximation to one logarithmic octave of motion.
+ * All interpolation arithmetic is fixed-point bigint; canonical camera state
+ * never passes through binary64.
+ */
+export function interpolateOctaveScale(
+  octaveStartScale: ExactDyadic,
+  progress: bigint,
+  progressBits: bigint,
+  direction: -1n | 1n,
+): ExactDyadic {
+  if (progressBits < 1n || progressBits > 60n) throw new RangeError("progressBits must be in [1, 60]");
+  const progressUnit = 1n << progressBits;
+  if (progress < 0n || progress > progressUnit) throw new RangeError("progress is outside one octave");
+  if (progress === 0n) return octaveStartScale;
+  if (progress === progressUnit) return scalePowerOfTwo(octaveStartScale, direction);
+
+  const fixedBits = 48n;
+  const fixedUnit = 1n << fixedBits;
+  const ln2Fixed = 195103586505167n;
+  const x = progress * fixedUnit / progressUnit;
+  const exponent = ln2Fixed * x / fixedUnit;
+  let term = fixedUnit;
+  let factor = fixedUnit;
+  for (let divisor = 1n; divisor <= 18n; divisor += 1n) {
+    term = term * exponent / (fixedUnit * divisor);
+    factor = direction === -1n && (divisor & 1n) === 1n ? factor - term : factor + term;
+  }
+  if (factor <= 0n) throw new RangeError("interpolated scale factor is not positive");
+  return multiply(octaveStartScale, dyadic(factor, -fixedBits));
 }
 
 export function pan(camera: ExactCamera, deltaX: ExactDyadic, deltaY: ExactDyadic): ExactCamera {

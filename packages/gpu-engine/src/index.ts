@@ -1,7 +1,11 @@
 import type { GpuCandidate } from "@webgpu-zoomer/numerical-contract";
 import { directMandelbrotShader } from "./direct.wgsl.js";
 import { mandelbrotPerturbationPreviewShader, maximumPerturbationIterations } from "./perturbation.wgsl.js";
-import { mandelbrotPreviewShader } from "./preview.wgsl.js";
+import {
+  mandelbrotProgressiveComputeShader,
+  mandelbrotProgressivePresentShader,
+  progressiveDispatchQuantum,
+} from "./progressive.wgsl.js";
 
 export type DirectSample = Readonly<{
   cRe: number;
@@ -20,8 +24,17 @@ const perturbationOrbitStride = 4;
 const perturbationReferenceMagnitudeLimit = 1e30;
 const perturbationGlitchThreshold = 0.25;
 const maximumPerturbationTransportError = 2 ** -40;
-const shallowPerturbationPreviewIterations = 320;
-const adaptivePerturbationScale = 2 ** -20;
+export const maximumProgressiveIterations = 50_000;
+export const maximumProgressivePixels = 4_194_304;
+
+export function nextProgressiveIterationFrontier(current: number, target: number): number {
+  if (!Number.isSafeInteger(current) || current < 0) throw new RangeError("current must be a non-negative safe integer");
+  if (!Number.isSafeInteger(target) || target < 1 || target > maximumProgressiveIterations) {
+    throw new RangeError(`target must be in [1, ${maximumProgressiveIterations}]`);
+  }
+  if (current > target) return Math.min(target, progressiveDispatchQuantum);
+  return Math.min(target, current + progressiveDispatchQuantum);
+}
 
 export type DirectMandelbrotPreviewView = Readonly<{
   kind: "direct";
@@ -58,11 +71,31 @@ export type PerturbationPreviewRequest = Readonly<{
   transportErrorLimit?: number;
 }>;
 
-export function perturbationPreviewIterationCap(viewportScale: number): number {
-  return Number.isFinite(viewportScale) && viewportScale > 0 && viewportScale <= adaptivePerturbationScale
-    ? maximumPerturbationIterations
-    : shallowPerturbationPreviewIterations;
+export function perturbationPreviewIterationCap(requestedIterations: number): number {
+  if (!Number.isSafeInteger(requestedIterations) || requestedIterations < 1) {
+    throw new RangeError("requestedIterations must be a positive safe integer");
+  }
+  return Math.min(requestedIterations, maximumPerturbationIterations);
 }
+
+export type ProgressiveRenderResult = Readonly<{
+  schemaVersion: 1;
+  method: "progressive-direct-f32-v1" | "bounded-f64-reference-compensated-ds-v1";
+  iterationTarget: number;
+  iterationFrontier: number;
+  dispatchQuantum: number;
+  complete: boolean;
+  canContinue: boolean;
+  requestReset: boolean;
+  limitation: "none" | "reference_path_iteration_limit";
+  coverage: Readonly<{
+    status: "measured" | "deferred";
+    activePixels: number | null;
+    escapedPixels: number | null;
+    unresolvedPixels: number | null;
+  }>;
+  authority: "presentation-only";
+}>;
 
 function splitFloat64(value: number): readonly [number, number] | undefined {
   const high = Math.fround(value);
@@ -133,7 +166,7 @@ export function createPerturbationPreviewView(
 }
 
 export type MandelbrotPreview = Readonly<{
-  render: (view: MandelbrotPreviewView) => void;
+  render: (view: MandelbrotPreviewView, iterationTarget: number, collectCoverage: boolean) => Promise<ProgressiveRenderResult>;
   destroy: () => void;
 }>;
 
@@ -150,17 +183,21 @@ export async function createMandelbrotPreview(device: GPUDevice, canvas: HTMLCan
   const format = navigator.gpu.getPreferredCanvasFormat();
   context.configure({ device, format, alphaMode: "opaque" });
 
-  const directModule = device.createShaderModule({ label: "shallow-mandelbrot-preview", code: mandelbrotPreviewShader });
   const perturbationModule = device.createShaderModule({ label: "bounded-perturbation-preview", code: mandelbrotPerturbationPreviewShader });
-  await Promise.all([assertCompiles(directModule), assertCompiles(perturbationModule)]);
-
-  const directPipeline = device.createRenderPipeline({
-    label: "shallow-mandelbrot-preview",
-    layout: "auto",
-    vertex: { module: directModule, entryPoint: "vertexMain" },
-    fragment: { module: directModule, entryPoint: "fragmentMain", targets: [{ format }] },
-    primitive: { topology: "triangle-list" },
+  const progressiveComputeModule = device.createShaderModule({
+    label: "progressive-direct-mandelbrot-compute",
+    code: mandelbrotProgressiveComputeShader,
   });
+  const progressivePresentModule = device.createShaderModule({
+    label: "progressive-direct-mandelbrot-present",
+    code: mandelbrotProgressivePresentShader,
+  });
+  await Promise.all([
+    assertCompiles(perturbationModule),
+    assertCompiles(progressiveComputeModule),
+    assertCompiles(progressivePresentModule),
+  ]);
+
   const perturbationPipeline = device.createRenderPipeline({
     label: "bounded-perturbation-preview",
     layout: "auto",
@@ -168,10 +205,17 @@ export async function createMandelbrotPreview(device: GPUDevice, canvas: HTMLCan
     fragment: { module: perturbationModule, entryPoint: "fragmentMain", targets: [{ format }] },
     primitive: { topology: "triangle-list" },
   });
-  const directUniformBuffer = device.createBuffer({
-    label: "shallow-mandelbrot-preview-uniforms",
-    size: 32,
-    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+  const progressiveComputePipeline = device.createComputePipeline({
+    label: "progressive-direct-mandelbrot-compute",
+    layout: "auto",
+    compute: { module: progressiveComputeModule, entryPoint: "main" },
+  });
+  const progressivePresentPipeline = device.createRenderPipeline({
+    label: "progressive-direct-mandelbrot-present",
+    layout: "auto",
+    vertex: { module: progressivePresentModule, entryPoint: "vertexMain" },
+    fragment: { module: progressivePresentModule, entryPoint: "fragmentMain", targets: [{ format }] },
+    primitive: { topology: "triangle-list" },
   });
   const perturbationUniformBuffer = device.createBuffer({
     label: "bounded-perturbation-preview-uniforms",
@@ -183,9 +227,20 @@ export async function createMandelbrotPreview(device: GPUDevice, canvas: HTMLCan
     size: (maximumPerturbationIterations + 1) * perturbationOrbitStride * Float32Array.BYTES_PER_ELEMENT,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
   });
-  const directBindGroup = device.createBindGroup({
-    layout: directPipeline.getBindGroupLayout(0),
-    entries: [{ binding: 0, resource: { buffer: directUniformBuffer } }],
+  const progressiveUniformBuffer = device.createBuffer({
+    label: "progressive-direct-mandelbrot-uniforms",
+    size: 32,
+    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+  });
+  const progressiveCoverageBuffer = device.createBuffer({
+    label: "progressive-direct-mandelbrot-coverage",
+    size: 16,
+    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
+  });
+  const progressiveCoverageReadback = device.createBuffer({
+    label: "progressive-direct-mandelbrot-coverage-readback",
+    size: 16,
+    usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
   });
   const perturbationBindGroup = device.createBindGroup({
     layout: perturbationPipeline.getBindGroupLayout(0),
@@ -195,15 +250,147 @@ export async function createMandelbrotPreview(device: GPUDevice, canvas: HTMLCan
     ],
   });
 
-  const render = (view: MandelbrotPreviewView) => {
+  let progressiveStateBuffer: GPUBuffer | undefined;
+  let progressiveTexture: GPUTexture | undefined;
+  let progressiveComputeBindGroup: GPUBindGroup | undefined;
+  let progressivePresentBindGroup: GPUBindGroup | undefined;
+  let progressiveIdentity: string | undefined;
+  let progressiveFrontier = 0;
+
+  const releaseProgressiveResources = () => {
+    progressiveStateBuffer?.destroy();
+    progressiveTexture?.destroy();
+    progressiveStateBuffer = undefined;
+    progressiveTexture = undefined;
+    progressiveComputeBindGroup = undefined;
+    progressivePresentBindGroup = undefined;
+    progressiveIdentity = undefined;
+    progressiveFrontier = 0;
+  };
+
+  const ensureProgressiveResources = () => {
+    const pixelCount = canvas.width * canvas.height;
+    if (!Number.isSafeInteger(pixelCount) || pixelCount < 1 || pixelCount > maximumProgressivePixels) {
+      throw new RangeError(`Progressive canvas exceeds ${maximumProgressivePixels} pixels.`);
+    }
+    const requiredSize = pixelCount * 16;
+    if (progressiveStateBuffer && progressiveTexture
+      && progressiveStateBuffer.size === requiredSize
+      && progressiveTexture.width === canvas.width && progressiveTexture.height === canvas.height) return;
+    releaseProgressiveResources();
+    progressiveStateBuffer = device.createBuffer({
+      label: "progressive-direct-mandelbrot-state",
+      size: requiredSize,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+    progressiveTexture = device.createTexture({
+      label: "progressive-direct-mandelbrot-output",
+      size: { width: canvas.width, height: canvas.height },
+      format: "rgba8unorm",
+      usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING,
+    });
+    progressiveComputeBindGroup = device.createBindGroup({
+      layout: progressiveComputePipeline.getBindGroupLayout(0),
+      entries: [
+        { binding: 0, resource: { buffer: progressiveUniformBuffer } },
+        { binding: 1, resource: { buffer: progressiveStateBuffer } },
+        { binding: 2, resource: progressiveTexture.createView() },
+        { binding: 3, resource: { buffer: progressiveCoverageBuffer } },
+      ],
+    });
+    progressivePresentBindGroup = device.createBindGroup({
+      layout: progressivePresentPipeline.getBindGroupLayout(0),
+      entries: [{ binding: 0, resource: progressiveTexture.createView() }],
+    });
+  };
+
+  const render = (
+    view: MandelbrotPreviewView,
+    iterationTarget: number,
+    collectCoverage: boolean,
+  ): Promise<ProgressiveRenderResult> => {
+    if (!Number.isSafeInteger(iterationTarget) || iterationTarget < 1 || iterationTarget > maximumProgressiveIterations) {
+      throw new RangeError(`iterationTarget must be in [1, ${maximumProgressiveIterations}]`);
+    }
     let pipeline: GPURenderPipeline;
     let bindGroup: GPUBindGroup;
     if (view.kind === "direct") {
-      device.queue.writeBuffer(directUniformBuffer, 0, new Float32Array([
-        canvas.width, canvas.height, view.centerX, view.centerY, view.viewportScale, 0, 0, 0,
+      ensureProgressiveResources();
+      const identity = JSON.stringify([
+        canvas.width, canvas.height, view.centerX, view.centerY, view.viewportScale, view.approximate,
+      ]);
+      const requestReset = progressiveIdentity !== identity || iterationTarget < progressiveFrontier;
+      if (requestReset) {
+        if (!progressiveStateBuffer) throw new Error("Progressive state buffer is unavailable.");
+        const clearEncoder = device.createCommandEncoder({ label: "progressive-direct-mandelbrot-reset" });
+        clearEncoder.clearBuffer(progressiveStateBuffer);
+        device.queue.submit([clearEncoder.finish()]);
+        progressiveIdentity = identity;
+        progressiveFrontier = 0;
+      }
+      const nextFrontier = nextProgressiveIterationFrontier(progressiveFrontier, iterationTarget);
+      device.queue.writeBuffer(progressiveUniformBuffer, 0, new Float32Array([
+        canvas.width, canvas.height, view.centerX, view.centerY,
+        view.viewportScale, nextFrontier, progressiveDispatchQuantum, 0,
       ]));
-      pipeline = directPipeline;
-      bindGroup = directBindGroup;
+      const encoder = device.createCommandEncoder({ label: "progressive-direct-mandelbrot-command" });
+      encoder.clearBuffer(progressiveCoverageBuffer);
+      const compute = encoder.beginComputePass({ label: "progressive-direct-mandelbrot-compute" });
+      compute.setPipeline(progressiveComputePipeline);
+      compute.setBindGroup(0, progressiveComputeBindGroup!);
+      compute.dispatchWorkgroups(Math.ceil(canvas.width / 8), Math.ceil(canvas.height / 8));
+      compute.end();
+      const present = encoder.beginRenderPass({
+        label: "progressive-direct-mandelbrot-present",
+        colorAttachments: [{
+          view: context.getCurrentTexture().createView(),
+          clearValue: { r: 0.004, g: 0.008, b: 0.018, a: 1 },
+          loadOp: "clear",
+          storeOp: "store",
+        }],
+      });
+      present.setPipeline(progressivePresentPipeline);
+      present.setBindGroup(0, progressivePresentBindGroup!);
+      present.draw(3);
+      present.end();
+      const completesTarget = nextFrontier >= iterationTarget;
+      if (collectCoverage && completesTarget) {
+        encoder.copyBufferToBuffer(progressiveCoverageBuffer, 0, progressiveCoverageReadback, 0, 16);
+      }
+      device.queue.submit([encoder.finish()]);
+      progressiveFrontier = nextFrontier;
+      return device.queue.onSubmittedWorkDone().then(async () => {
+        let coverage: ProgressiveRenderResult["coverage"] = Object.freeze({
+          status: "deferred" as const,
+          activePixels: null,
+          escapedPixels: null,
+          unresolvedPixels: null,
+        });
+        if (collectCoverage && completesTarget) {
+          await progressiveCoverageReadback.mapAsync(GPUMapMode.READ);
+          const values = new Uint32Array(progressiveCoverageReadback.getMappedRange());
+          coverage = Object.freeze({
+            status: "measured" as const,
+            activePixels: values[0]!,
+            escapedPixels: values[1]!,
+            unresolvedPixels: values[2]!,
+          });
+          progressiveCoverageReadback.unmap();
+        }
+        return Object.freeze({
+          schemaVersion: 1 as const,
+          method: "progressive-direct-f32-v1" as const,
+          iterationTarget,
+          iterationFrontier: progressiveFrontier,
+          dispatchQuantum: progressiveDispatchQuantum,
+          complete: progressiveFrontier >= iterationTarget,
+          canContinue: progressiveFrontier < iterationTarget,
+          requestReset,
+          limitation: "none" as const,
+          coverage,
+          authority: "presentation-only" as const,
+        });
+      });
     } else {
       device.queue.writeBuffer(referenceBuffer, 0, view.referenceOrbit);
       device.queue.writeBuffer(perturbationUniformBuffer, 0, new Float32Array([
@@ -228,14 +415,35 @@ export async function createMandelbrotPreview(device: GPUDevice, canvas: HTMLCan
     pass.draw(3);
     pass.end();
     device.queue.submit([encoder.finish()]);
+    return device.queue.onSubmittedWorkDone().then(() => Object.freeze({
+      schemaVersion: 1 as const,
+      method: view.previewMode,
+      iterationTarget,
+      iterationFrontier: view.iterationCap,
+      dispatchQuantum: view.iterationCap,
+      complete: view.iterationCap >= iterationTarget,
+      canContinue: false,
+      requestReset: true,
+      limitation: view.iterationCap >= iterationTarget ? "none" as const : "reference_path_iteration_limit" as const,
+      coverage: Object.freeze({
+        status: "deferred" as const,
+        activePixels: null,
+        escapedPixels: null,
+        unresolvedPixels: null,
+      }),
+      authority: "presentation-only" as const,
+    }));
   };
 
   return {
     render,
     destroy: () => {
-      directUniformBuffer.destroy();
       perturbationUniformBuffer.destroy();
       referenceBuffer.destroy();
+      progressiveUniformBuffer.destroy();
+      progressiveCoverageBuffer.destroy();
+      progressiveCoverageReadback.destroy();
+      releaseProgressiveResources();
     },
   };
 }

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { createPerturbationPreviewView, perturbationPreviewIterationCap } from "./index.js";
+import {
+  createPerturbationPreviewView,
+  perturbationPreviewIterationCap,
+} from "./index.js";
 
 describe("bounded perturbation preview transport", () => {
   it("creates finite high/low reference transport for the recorded deep-zoom aim", () => {
@@ -23,9 +26,10 @@ describe("bounded perturbation preview transport", () => {
     expect(view!.referenceOrbit.slice(0, 4)).toEqual(new Float32Array([0, 0, 0, 0]));
   });
 
-  it("selects the bounded deep iteration tier without changing the maximum allocation", () => {
-    expect(perturbationPreviewIterationCap(2 ** -19)).toBe(320);
-    expect(perturbationPreviewIterationCap(2 ** -22)).toBe(512);
+  it("bounds only the compatibility reference path, not global convergence", () => {
+    expect(perturbationPreviewIterationCap(8)).toBe(8);
+    expect(perturbationPreviewIterationCap(320)).toBe(320);
+    expect(perturbationPreviewIterationCap(50_000)).toBe(512);
   });
 
   it("rejects invalid, oversized, and non-finite reference requests before allocation", () => {
